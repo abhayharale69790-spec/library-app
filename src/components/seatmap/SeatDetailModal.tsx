@@ -13,20 +13,20 @@ import {
   CheckCircle2, 
   Calendar,
   Zap,
-  Lock
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { formatDateDisplay, getDaysRemaining } from '../../utils/dateMath';
+import { BottomSheet } from '../common/BottomSheet';
 
 interface SeatDetailModalProps {
   seat: Seat;
-  activeShift: Shift;
   onClose: () => void;
   onOpenMemberDetail: (memberId: string) => void;
 }
 
 export const SeatDetailModal: React.FC<SeatDetailModalProps> = ({
   seat,
-  activeShift,
   onClose,
   onOpenMemberDetail,
 }) => {
@@ -40,7 +40,10 @@ export const SeatDetailModal: React.FC<SeatDetailModalProps> = ({
     blockSeat,
     unblockSeat,
     sendWhatsAppNotification,
+    selectedShiftFilter,
   } = useLibrary();
+
+  const activeShift = shifts.find(s => s.id === selectedShiftFilter) || shifts[0];
 
   // Find active assignment for this specific seat AND this shift
   const currentAssignment = assignments.find(
@@ -60,7 +63,6 @@ export const SeatDetailModal: React.FC<SeatDetailModalProps> = ({
   // Available members without a seat in this shift
   const eligibleMembers = members.filter(m => {
     if (m.status !== 'ACTIVE' && m.status !== 'EXPIRING') return false;
-    // Check if already assigned a seat in this shift
     const hasSeatInShift = assignments.some(a => a.memberId === m.id && a.shiftId === activeShift.id && a.status === 'ACTIVE');
     return !hasSeatInShift;
   });
@@ -84,7 +86,7 @@ export const SeatDetailModal: React.FC<SeatDetailModalProps> = ({
       setStatusMsg({ type: 'error', text: res.error || 'Assignment failed.' });
     } else {
       setStatusMsg({ type: 'success', text: `Seat ${seat.label} assigned successfully!` });
-      setTimeout(onClose, 1000);
+      setTimeout(onClose, 800);
     }
   };
 
@@ -98,323 +100,256 @@ export const SeatDetailModal: React.FC<SeatDetailModalProps> = ({
       setStatusMsg({ type: 'error', text: res.error || 'Transfer failed.' });
     } else {
       setStatusMsg({ type: 'success', text: `Transferred to ${seats.find(s => s.id === targetSeatId)?.label}!` });
-      setTimeout(onClose, 1000);
+      setTimeout(onClose, 800);
     }
   };
 
-  const handleBlockToggle = () => {
+  const handleToggleBlock = () => {
     if (seat.isBlocked) {
       unblockSeat(seat.id);
       setStatusMsg({ type: 'success', text: `Seat ${seat.label} unblocked.` });
-      setTimeout(onClose, 800);
     } else {
       blockSeat(seat.id, blockReason);
-      setStatusMsg({ type: 'success', text: `Seat ${seat.label} blocked.` });
-      setTimeout(onClose, 800);
+      setStatusMsg({ type: 'success', text: `Seat ${seat.label} marked under maintenance.` });
     }
+    setTimeout(onClose, 800);
   };
 
-  const handleSendReminder = () => {
-    if (!occupant) return;
-    const { url } = sendWhatsAppNotification(occupant.id, daysRemaining <= 3 ? 'EXPIRY_REMINDER_3D' : 'EXPIRY_REMINDER_7D');
-    window.open(url, '_blank');
-  };
+  const isOccupied = !!occupant;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-        {/* Modal Header */}
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              background: seat.isBlocked ? 'var(--seat-blocked-bg)' : occupant ? 'var(--seat-occupied-bg)' : 'var(--seat-available-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <Armchair size={20} color={seat.isBlocked ? 'var(--seat-blocked)' : occupant ? 'var(--brand-primary)' : 'var(--status-success)'} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '17px', fontWeight: 800 }}>
-                Desk {seat.label} ({seat.zone})
-              </h3>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Shift: <strong style={{ color: activeShift.color }}>{activeShift.name.split(' (')[0]}</strong> ({activeShift.startTime} - {activeShift.endTime})
-              </div>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="modal-body">
-          {statusMsg && (
-            <div style={{
+    <BottomSheet
+      isOpen={true}
+      onClose={onClose}
+      title={`Desk ${seat.label}`}
+      subtitle={`${activeShift.name.split(' ')[0]} Shift • ${seat.zone}`}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {statusMsg && (
+          <div 
+            style={{
               padding: '10px 14px',
               borderRadius: 'var(--radius-md)',
-              marginBottom: '16px',
-              background: statusMsg.type === 'error' ? 'var(--status-danger-bg)' : 'var(--status-success-bg)',
-              border: `1px solid ${statusMsg.type === 'error' ? 'var(--status-danger)' : 'var(--status-success)'}`,
-              color: statusMsg.type === 'error' ? 'var(--status-danger)' : 'var(--status-success)',
+              background: statusMsg.type === 'success' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
+              color: statusMsg.type === 'success' ? 'var(--status-success)' : 'var(--status-danger)',
               fontSize: '13px',
-              fontWeight: 600,
-            }}>
-              {statusMsg.text}
-            </div>
-          )}
-
-          {/* Desk Amenities Tags */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            {seat.powerSocket && (
-              <span className="badge badge-neutral" style={{ gap: '4px' }}>
-                <Zap size={12} color="var(--status-warning)" />
-                Power Socket
-              </span>
-            )}
-            {seat.hasLocker && (
-              <span className="badge badge-neutral" style={{ gap: '4px' }}>
-                <Lock size={12} color="var(--status-info)" />
-                Personal Locker
-              </span>
-            )}
-            <span className="badge badge-neutral">
-              Type: {seat.type}
-            </span>
+              fontWeight: 600
+            }}
+          >
+            {statusMsg.text}
           </div>
+        )}
 
-          {/* Main Content by State */}
-          {modalAction === 'DETAILS' && (
-            <>
-              {seat.isBlocked ? (
-                <div style={{
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'rgba(100, 116, 139, 0.15)',
-                  border: '1px solid var(--border-medium)',
-                  marginBottom: '16px',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
-                    <ShieldAlert size={18} />
-                    <strong style={{ color: 'var(--text-primary)' }}>Seat Currently Blocked</strong>
+        {/* 1. Main Overview Mode */}
+        {modalAction === 'DETAILS' && (
+          <>
+            {/* Status & Amenities Banner */}
+            <div 
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 14px',
+                background: 'var(--bg-surface-elevated)',
+                borderRadius: 'var(--radius-md)'
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status</span>
+                <p style={{ fontSize: '14px', fontWeight: '700', color: isOccupied ? 'var(--brand-primary)' : seat.isBlocked ? 'var(--status-danger)' : 'var(--status-success)' }}>
+                  {isOccupied ? '● Occupied' : seat.isBlocked ? '⚠️ Maintenance Blocked' : '✓ Available'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <span className="badge badge-neutral">{seat.powerSocket ? '⚡ Socket' : 'No Socket'}</span>
+                <span className="badge badge-neutral">{seat.hasLocker ? '🔒 Locker' : 'No Locker'}</span>
+              </div>
+            </div>
+
+            {/* Occupant Info Card (if occupied) */}
+            {isOccupied && occupant && (
+              <div className="mobile-card" style={{ margin: 0, padding: '14px', background: 'rgba(59, 130, 246, 0.05)', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--brand-primary)', textTransform: 'uppercase' }}>Assigned Scholar</span>
+                    <h4 style={{ fontSize: '16px', fontWeight: '800', marginTop: '2px' }}>{occupant.fullName}</h4>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID: {occupant.memberCode} • {occupant.targetExam || 'General'}</p>
                   </div>
-                  <p style={{ fontSize: '13px', marginTop: '6px' }}>
-                    Reason: {seat.blockReason || 'Under maintenance'}
-                  </p>
+                  <span className={`badge ${daysRemaining <= 3 ? 'badge-warning' : 'badge-success'}`}>
+                    {daysRemaining}d left
+                  </span>
                 </div>
-              ) : occupant ? (
-                <div style={{
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-input)',
-                  border: '1px solid var(--border-subtle)',
-                  marginBottom: '16px',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                        Current Occupant
-                      </div>
-                      <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
-                        {occupant.fullName}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {occupant.memberCode} • {occupant.phone}
-                      </div>
-                    </div>
 
-                    <span className={`badge ${daysRemaining <= 3 ? 'badge-danger' : daysRemaining <= 7 ? 'badge-warning' : 'badge-success'}`}>
-                      {daysRemaining < 0 ? 'EXPIRED' : `${daysRemaining} days left`}
-                    </span>
-                  </div>
-
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Target Exam: <strong>{occupant.targetExam || 'General'}</strong></span>
-                    <span>Valid Till: <strong>{formatDateDisplay(currentAssignment?.endDate || '')}</strong></span>
-                  </div>
-                </div>
-              ) : (
-                <div style={{
-                  padding: '24px',
-                  textAlign: 'center',
-                  background: 'var(--status-success-bg)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px dashed rgba(16, 185, 129, 0.4)',
-                  marginBottom: '16px',
-                }}>
-                  <CheckCircle2 size={32} color="var(--status-success)" style={{ margin: '0 auto 8px' }} />
-                  <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--status-success)' }}>
-                    Desk is Available for {activeShift.name.split(' (')[0]}
-                  </div>
-                  <p style={{ fontSize: '12px', marginTop: '4px' }}>
-                    Zero conflicts detected for this shift slot. Ready to allocate to any scholar.
-                  </p>
-                </div>
-              )}
-
-              {/* Multi-Shift Seat Sharing Table */}
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                  24-Hour Shift Allocation for Desk {seat.label}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {shifts.map(sh => {
-                    const asgn = assignments.find(a => a.seatId === seat.id && a.shiftId === sh.id && a.status === 'ACTIVE');
-                    const mem = asgn ? members.find(m => m.id === asgn.memberId) : null;
-
-                    return (
-                      <div
-                        key={sh.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          background: sh.id === activeShift.id ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-input)',
-                          border: sh.id === activeShift.id ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid transparent',
-                          fontSize: '12px',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: sh.color }} />
-                          <span style={{ fontWeight: 600 }}>{sh.name.split(' (')[0]}</span>
-                        </div>
-                        <div>
-                          {mem ? (
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                              👤 {mem.fullName}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--status-success)' }}>
-                              🟢 Available
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenMemberDetail(occupant.id);
+                    }}
+                    className="btn-secondary"
+                    style={{ flex: 1, minHeight: '38px', fontSize: '12px' }}
+                  >
+                    <User size={14} /> Full Profile
+                  </button>
+                  <button
+                    onClick={() => {
+                      const { url } = sendWhatsAppNotification(occupant.id, 'SEAT_ASSIGNED');
+                      window.open(url, '_blank');
+                    }}
+                    className="btn-secondary"
+                    style={{ minHeight: '38px', padding: '0 12px', color: '#25D366' }}
+                    title="Send WhatsApp"
+                  >
+                    <MessageSquare size={16} />
+                  </button>
                 </div>
               </div>
-            </>
-          )}
+            )}
 
-          {/* Form: Assign Seat */}
-          {modalAction === 'ASSIGN' && (
+            {/* Action Buttons Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: isOccupied ? 'repeat(2, 1fr)' : '1fr', gap: '10px', marginTop: '6px' }}>
+              {!isOccupied && !seat.isBlocked && (
+                <button
+                  onClick={() => setModalAction('ASSIGN')}
+                  className="btn-primary"
+                  style={{ minHeight: '48px', fontSize: '15px' }}
+                >
+                  <Armchair size={18} /> Assign Student to Desk
+                </button>
+              )}
+
+              {isOccupied && (
+                <>
+                  <button
+                    onClick={() => setModalAction('TRANSFER')}
+                    className="btn-secondary"
+                    style={{ minHeight: '48px', fontSize: '14px' }}
+                  >
+                    <ArrowRightLeft size={16} /> Transfer Seat
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (occupant) {
+                        unblockSeat(seat.id);
+                        setStatusMsg({ type: 'success', text: 'Seat freed!' });
+                        setTimeout(onClose, 800);
+                      }
+                    }}
+                    className="btn-danger"
+                    style={{ minHeight: '48px', fontSize: '14px' }}
+                  >
+                    Vacate Desk
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Maintenance Toggle */}
+            <button
+              onClick={() => setModalAction('BLOCK')}
+              className="btn-ghost"
+              style={{ width: '100%', minHeight: '40px', fontSize: '13px', color: 'var(--text-muted)' }}
+            >
+              <Wrench size={14} /> {seat.isBlocked ? 'Remove Maintenance Block' : 'Mark for Maintenance / Block'}
+            </button>
+          </>
+        )}
+
+        {/* 2. Assign Student Mode */}
+        {modalAction === 'ASSIGN' && (
+          <div>
+            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>Select Student for Desk {seat.label}</h4>
             <div className="form-group">
-              <label className="form-label">Select Student for {activeShift.name.split(' (')[0]}</label>
+              <label className="form-label">Available Scholars ({eligibleMembers.length})</label>
               <select
-                className="form-control"
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
+                className="form-select"
               >
-                <option value="">-- Choose active student --</option>
+                <option value="">-- Choose active member --</option>
                 {eligibleMembers.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.fullName} ({m.memberCode}) • {m.targetExam || 'General'}
+                    {m.fullName} ({m.memberCode}) - {m.targetExam || 'General'}
                   </option>
                 ))}
               </select>
             </div>
-          )}
 
-          {/* Form: Transfer Seat */}
-          {modalAction === 'TRANSFER' && occupant && (
-            <div className="form-group">
-              <label className="form-label">Select Destination Desk for {occupant.fullName}</label>
-              <select
-                className="form-control"
-                value={targetSeatId}
-                onChange={(e) => setTargetSeatId(e.target.value)}
-              >
-                <option value="">-- Choose free desk in {activeShift.name.split(' (')[0]} --</option>
-                {freeSeatsInShift.map(s => (
-                  <option key={s.id} value={s.id}>
-                    Desk {s.label} ({s.zone}) {s.hasLocker ? '• with Locker' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Form: Block Seat */}
-          {modalAction === 'BLOCK' && (
-            <div className="form-group">
-              <label className="form-label">Maintenance / Block Reason</label>
-              <input
-                type="text"
-                className="form-control"
-                value={blockReason}
-                onChange={(e) => setBlockReason(e.target.value)}
-                placeholder="e.g. AC Duct repair, table lamp replacement"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer Actions */}
-        <div className="modal-footer">
-          {modalAction === 'DETAILS' ? (
-            <>
-              {seat.isBlocked ? (
-                <button onClick={handleBlockToggle} className="btn btn-success btn-sm">
-                  Unblock Desk
-                </button>
-              ) : occupant ? (
-                <>
-                  <button onClick={handleSendReminder} className="btn btn-sm" style={{ background: '#25D366', color: '#fff', gap: '4px' }}>
-                    <Send size={13} />
-                    <span>WhatsApp</span>
-                  </button>
-                  <button onClick={() => setModalAction('TRANSFER')} className="btn btn-secondary btn-sm" style={{ gap: '4px' }}>
-                    <ArrowRightLeft size={13} />
-                    <span>Transfer Desk</span>
-                  </button>
-                  <button onClick={() => onOpenMemberDetail(occupant.id)} className="btn btn-primary btn-sm">
-                    View Profile
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setModalAction('BLOCK')} className="btn btn-secondary btn-sm" style={{ gap: '4px' }}>
-                    <Wrench size={13} />
-                    <span>Block Desk</span>
-                  </button>
-                  <button onClick={() => setModalAction('ASSIGN')} className="btn btn-primary btn-sm">
-                    Assign Desk
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <button onClick={() => setModalAction('DETAILS')} className="btn btn-ghost btn-sm">
+            <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+              <button onClick={() => setModalAction('DETAILS')} className="btn-secondary" style={{ flex: 1 }}>
                 Cancel
               </button>
-              {modalAction === 'ASSIGN' && (
-                <button onClick={handleAssign} className="btn btn-primary btn-sm">
-                  Confirm Assignment
-                </button>
-              )}
-              {modalAction === 'TRANSFER' && (
-                <button onClick={handleTransfer} className="btn btn-primary btn-sm">
-                  Confirm Transfer
-                </button>
-              )}
-              {modalAction === 'BLOCK' && (
-                <button onClick={handleBlockToggle} className="btn btn-danger btn-sm">
-                  Confirm Block
-                </button>
-              )}
-            </>
-          )}
-        </div>
+              <button onClick={handleAssign} className="btn-primary" style={{ flex: 1 }}>
+                Confirm Assignment
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 3. Transfer Seat Mode */}
+        {modalAction === 'TRANSFER' && (
+          <div>
+            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>Transfer {occupant?.fullName} to Another Desk</h4>
+            <div className="form-group">
+              <label className="form-label">Available Desks in {activeShift.name.split(' ')[0]} Shift</label>
+              <select
+                value={targetSeatId}
+                onChange={(e) => setTargetSeatId(e.target.value)}
+                className="form-select"
+              >
+                <option value="">-- Select Destination Desk --</option>
+                {freeSeatsInShift.map(s => (
+                  <option key={s.id} value={s.id}>
+                    Desk {s.label} ({s.zone}) {s.powerSocket ? '⚡' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+              <button onClick={() => setModalAction('DETAILS')} className="btn-secondary" style={{ flex: 1 }}>
+                Cancel
+              </button>
+              <button onClick={handleTransfer} className="btn-primary" style={{ flex: 1 }}>
+                Execute Transfer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Block / Maintenance Mode */}
+        {modalAction === 'BLOCK' && (
+          <div>
+            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>
+              {seat.isBlocked ? 'Unblock Desk' : 'Place Desk Under Maintenance'}
+            </h4>
+            {!seat.isBlocked && (
+              <div className="form-group">
+                <label className="form-label">Reason for blocking</label>
+                <input
+                  type="text"
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  className="form-input"
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+              <button onClick={() => setModalAction('DETAILS')} className="btn-secondary" style={{ flex: 1 }}>
+                Cancel
+              </button>
+              <button 
+                onClick={handleToggleBlock} 
+                className={seat.isBlocked ? 'btn-primary' : 'btn-danger'} 
+                style={{ flex: 1 }}
+              >
+                {seat.isBlocked ? 'Confirm Unblock' : 'Confirm Block'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </BottomSheet>
   );
 };

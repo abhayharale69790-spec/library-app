@@ -9,9 +9,17 @@ import {
   Armchair, 
   CreditCard, 
   Sparkles,
-  Zap
+  ChevronRight,
+  ChevronLeft,
+  Calendar,
+  Layers,
+  Phone,
+  Mail,
+  User,
+  GraduationCap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { BottomSheet } from '../common/BottomSheet';
 
 interface AddMemberModalProps {
   onClose: () => void;
@@ -28,12 +36,15 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ onClose, onSucce
     addMember,
   } = useLibrary();
 
+  // Wizard Step: 1 = Basic Info, 2 = Plan, 3 = Shift & Seat, 4 = Payment & Confirmation
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+
   // Form State
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
-  const [targetExam, setTargetExam] = useState('UPSC Civil Services 2027');
+  const [targetExam, setTargetExam] = useState('UPSC Civil Services');
   
   const [planId, setPlanId] = useState(plans[0]?.id || '');
   const [shiftId, setShiftId] = useState(shifts[0]?.id || '');
@@ -61,6 +72,38 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ onClose, onSucce
     return !isOccupied;
   });
 
+  const selectedShift = shifts.find(s => s.id === shiftId);
+  const selectedSeat = seats.find(s => s.id === seatId);
+
+  const validateStep1 = () => {
+    if (!fullName.trim()) return 'Please enter student full name';
+    if (!phone.trim() || phone.length < 10) return 'Please enter a valid 10-digit mobile number';
+    return null;
+  };
+
+  const handleNext = () => {
+    setErrorMsg(null);
+    if (currentStep === 1) {
+      const err = validateStep1();
+      if (err) {
+        setErrorMsg(err);
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
+      setCurrentStep(4);
+    }
+  };
+
+  const handleBack = () => {
+    setErrorMsg(null);
+    if (currentStep > 1) {
+      setCurrentStep((currentStep - 1) as any);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -68,8 +111,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ onClose, onSucce
     const res = addMember({
       fullName,
       phone,
-      email,
-      emergencyContact,
+      email: email || `${phone}@student.24library.in`,
+      emergencyContact: emergencyContact || phone,
       targetExam,
       planId,
       shiftId,
@@ -94,252 +137,315 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({ onClose, onSucce
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
-        {/* Header */}
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <UserPlus size={20} color="#ffffff" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '17px', fontWeight: 800 }}>
-                Onboard New Scholar
-              </h3>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Branch: <strong>{currentBranch.name}</strong>
-              </div>
-            </div>
-          </div>
-
-          <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '6px' }}>
-            <X size={18} />
-          </button>
+    <BottomSheet
+      isOpen={true}
+      onClose={onClose}
+      title={`Admission Wizard (${currentStep}/4)`}
+      subtitle={`Enrolling scholar in ${currentBranch.name}`}
+      maxWidth="580px"
+    >
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Step Progress Bar */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[1, 2, 3, 4].map(step => (
+            <div
+              key={step}
+              style={{
+                flex: 1,
+                height: '4px',
+                borderRadius: '2px',
+                background: step <= currentStep ? 'var(--brand-primary)' : 'var(--border-medium)',
+                transition: 'background var(--transition-fast)'
+              }}
+            />
+          ))}
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {errorMsg && (
-              <div style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--status-danger-bg)',
-                border: '1px solid var(--status-danger)',
-                color: 'var(--status-danger)',
-                fontSize: '13px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}>
-                <AlertTriangle size={16} />
-                <span>{errorMsg}</span>
-              </div>
-            )}
+        {errorMsg && (
+          <div 
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--status-danger-bg)',
+              color: 'var(--status-danger)',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <AlertTriangle size={16} /> {errorMsg}
+          </div>
+        )}
 
-            {/* Personal Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Aditi Deshmukh"
-                  className="form-control"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
-              </div>
+        {/* STEP 1: Basic Information */}
+        {currentStep === 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Step 1: Student Information
+            </h4>
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Mobile Number *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. +91 98201 55667"
-                  className="form-control"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Full Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Rahul Sharma"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="form-input"
+                required
+                autoFocus
+              />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="e.g. aditi@example.com"
-                  className="form-control"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Emergency Contact Phone</label>
-                <input
-                  type="tel"
-                  placeholder="e.g. +91 98201 99887 (Parent)"
-                  className="form-control"
-                  value={emergencyContact}
-                  onChange={(e) => setEmergencyContact(e.target.value)}
-                />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Mobile Number (WhatsApp) *</label>
+              <input
+                type="tel"
+                placeholder="10-digit mobile number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="form-input"
+                required
+              />
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Target Exam / Study Purpose</label>
+            <div className="form-group">
+              <label className="form-label">Competitive Exam / Goal</label>
               <select
-                className="form-control"
                 value={targetExam}
                 onChange={(e) => setTargetExam(e.target.value)}
+                className="form-select"
               >
-                <option value="UPSC Civil Services 2027">UPSC Civil Services (IAS/IPS)</option>
-                <option value="CA Final Nov 2026">CA Final / Inter (ICAI)</option>
-                <option value="NEET PG Medical Prep">NEET PG / Super Speciality</option>
-                <option value="GATE Computer Science / Engg">GATE CSE / ECE</option>
-                <option value="State PSC Exam">State Public Service Commission (MPSC/TNPSC/UPPSC)</option>
-                <option value="IIT JEE / NEET UG Scholar">IIT JEE / NEET UG</option>
-                <option value="Judiciary & Judicial Services">Judiciary / CLAT PG</option>
-                <option value="General Self-Study">General Academic / Tech Prep</option>
+                <option value="UPSC Civil Services">UPSC Civil Services</option>
+                <option value="MPSC / State PSC">MPSC / State PSC</option>
+                <option value="CA Final / Inter">CA Final / Inter</option>
+                <option value="NEET PG / Medical">NEET PG / Medical</option>
+                <option value="GATE / Engineering">GATE / Engineering</option>
+                <option value="Banking / SSC CGL">Banking / SSC CGL</option>
+                <option value="General Study">General Reading / Study</option>
               </select>
             </div>
 
-            {/* Plan & Shift Selection */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Membership Plan</label>
-                <select
-                  className="form-control"
-                  value={planId}
-                  onChange={(e) => handlePlanChange(e.target.value)}
-                >
-                  {plans.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.durationDays} Days) — ₹{p.basePrice.toLocaleString('en-IN')}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="form-group">
+              <label className="form-label">Email Address (Optional)</label>
+              <input
+                type="email"
+                placeholder="student@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="form-input"
+              />
+            </div>
+          </div>
+        )}
 
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Study Shift Slot</label>
-                <select
-                  className="form-control"
-                  value={shiftId}
-                  onChange={(e) => {
-                    setShiftId(e.target.value);
-                    setSeatId(''); // Reset seat when shift changes
-                  }}
-                >
-                  {shifts.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name.split(' (')[0]} ({s.startTime} - {s.endTime})
-                    </option>
-                  ))}
-                </select>
+        {/* STEP 2: Membership Plan */}
+        {currentStep === 2 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Step 2: Choose Membership Plan
+            </h4>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {plans.map(plan => {
+                const isSelected = plan.id === planId;
+                return (
+                  <div
+                    key={plan.id}
+                    onClick={() => handlePlanChange(plan.id)}
+                    className="mobile-card mobile-card-interactive"
+                    style={{
+                      margin: 0,
+                      padding: '14px',
+                      border: `1.5px solid ${isSelected ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                      background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-card)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: '700', color: isSelected ? 'var(--brand-primary)' : 'var(--text-primary)' }}>
+                          {plan.name}
+                        </h4>
+                        <span className="badge badge-neutral">{plan.durationDays} Days</span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {plan.description}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '17px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                        ₹{plan.basePrice}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: Shift & Seat Allocation */}
+        {currentStep === 3 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Step 3: Shift & Reserved Desk
+            </h4>
+
+            <div className="form-group">
+              <label className="form-label">Preferred Study Shift *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                {shifts.filter(s => s.branchId === currentBranch.id).map(shift => {
+                  const isSelected = shift.id === shiftId;
+                  return (
+                    <button
+                      type="button"
+                      key={shift.id}
+                      onClick={() => {
+                        setShiftId(shift.id);
+                        setSeatId('');
+                      }}
+                      className="quick-action-card"
+                      style={{
+                        margin: 0,
+                        border: `1.5px solid ${isSelected ? 'var(--brand-primary)' : 'var(--border-subtle)'}`,
+                        background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-card)',
+                        minHeight: '64px',
+                        padding: '10px'
+                      }}
+                    >
+                      <span style={{ fontWeight: '700', color: isSelected ? 'var(--brand-primary)' : 'var(--text-primary)' }}>
+                        {shift.name.split(' ')[0]}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {shift.startTime} - {shift.endTime}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Seat Selection */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group">
               <label className="form-label">
-                <span>Select Reserved Desk ({availableSeats.length} Available in this Shift)</span>
-                {seatId && <span style={{ color: 'var(--status-success)' }}>Desk {seats.find(s => s.id === seatId)?.label} Selected</span>}
+                Desk Assignment ({availableSeats.length} Available in this Shift)
               </label>
               <select
-                className="form-control"
                 value={seatId}
                 onChange={(e) => setSeatId(e.target.value)}
+                className="form-select"
               >
-                <option value="">-- Leave as Floating / Unassigned Desk --</option>
+                <option value="">-- Floating / Assign Later --</option>
                 {availableSeats.map(s => (
                   <option key={s.id} value={s.id}>
-                    Desk {s.label} ({s.zone}) {s.hasLocker ? '• Deluxe with Locker' : ''}
+                    Desk {s.label} ({s.zone}) {s.powerSocket ? '⚡ Socket' : ''}
                   </option>
                 ))}
               </select>
-            </div>
-
-            {/* Fee Collection & Payment */}
-            <div style={{
-              padding: '16px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Fee Collection & Admission Payment
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--brand-primary)' }}>
-                  Plan Total: ₹{selectedPlan.basePrice.toLocaleString('en-IN')}
-                </span>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>Amount Collecting Now (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={selectedPlan.basePrice}
-                    className="form-control"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(Number(e.target.value))}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>Payment Mode</label>
-                  <select
-                    className="form-control"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  >
-                    <option value="UPI_GPAY">Google Pay (UPI)</option>
-                    <option value="UPI_PHONEPE">PhonePe (UPI)</option>
-                    <option value="UPI_PAYTM">Paytm (UPI)</option>
-                    <option value="CASH">Cash at Desk</option>
-                    <option value="CARD">Debit / Credit Card</option>
-                    <option value="NETBANKING">Net Banking / NEFT</option>
-                  </select>
-                </div>
-              </div>
-
-              {selectedPlan.basePrice > amountPaid && (
-                <div style={{ fontSize: '11.5px', color: 'var(--status-warning)', fontWeight: 600 }}>
-                  ⚠️ Outstanding balance of ₹{(selectedPlan.basePrice - amountPaid).toLocaleString('en-IN')} will be recorded as pending due.
-                </div>
-              )}
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                {seatId ? `✓ Desk ${selectedSeat?.label} locked for ${selectedShift?.name.split(' ')[0]} shift.` : 'Scholar can sit on any available floating seat.'}
+              </p>
             </div>
           </div>
+        )}
 
-          {/* Footer */}
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-ghost btn-sm">
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary btn-sm" style={{ gap: '6px' }}>
-              <CheckCircle2 size={16} />
-              <span>Complete Admission</span>
-            </button>
+        {/* STEP 4: Fee & Payment Settlement */}
+        {currentStep === 4 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Step 4: Fee Settlement & Review
+            </h4>
+
+            {/* Admission Summary Card */}
+            <div className="mobile-card" style={{ margin: 0, padding: '14px', background: 'var(--bg-surface-elevated)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Scholar</span>
+                <strong style={{ color: 'var(--text-primary)' }}>{fullName}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Plan & Shift</span>
+                <strong style={{ color: 'var(--text-primary)' }}>{selectedPlan.name} • {selectedShift?.name.split(' ')[0]}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Desk Allocated</span>
+                <strong style={{ color: 'var(--brand-primary)' }}>{selectedSeat ? `Desk ${selectedSeat.label} (${selectedSeat.zone})` : 'Floating'}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: '14px', fontWeight: '700' }}>Plan Total Fee</span>
+                <strong style={{ fontSize: '16px', color: 'var(--text-primary)' }}>₹{selectedPlan.basePrice}</strong>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Initial Amount Paid (₹) *</label>
+              <input
+                type="number"
+                min="0"
+                max={selectedPlan.basePrice}
+                value={amountPaid}
+                onChange={(e) => setAmountPaid(Number(e.target.value))}
+                className="form-input"
+                required
+              />
+              <p style={{ fontSize: '11px', color: amountPaid < selectedPlan.basePrice ? 'var(--status-danger)' : 'var(--status-success)', marginTop: '4px' }}>
+                {amountPaid < selectedPlan.basePrice ? `Remaining Due: ₹${selectedPlan.basePrice - amountPaid}` : '✓ Full fee paid'}
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Payment Mode *</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="form-select"
+              >
+                <option value="UPI_GPAY">Google Pay / PhonePe UPI</option>
+                <option value="UPI_PAYTM">Paytm UPI / QR</option>
+                <option value="CASH">Cash Reception</option>
+                <option value="CARD">Debit / Credit Card POS</option>
+                <option value="NETBANKING">Direct Bank Transfer</option>
+              </select>
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        {/* Wizard Controls */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          {currentStep > 1 && (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="btn-secondary"
+              style={{ flex: 1, minHeight: '48px' }}
+            >
+              <ChevronLeft size={18} /> Back
+            </button>
+          )}
+
+          {currentStep < 4 ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              className="btn-primary"
+              style={{ flex: 2, minHeight: '48px', fontSize: '15px' }}
+            >
+              Continue <ChevronRight size={18} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ flex: 2, minHeight: '48px', fontSize: '15px', background: 'linear-gradient(135deg, #10b981, #059669)', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)' }}
+            >
+              <CheckCircle2 size={18} /> Confirm & Enroll Scholar
+            </button>
+          )}
+        </div>
+      </form>
+    </BottomSheet>
   );
 };

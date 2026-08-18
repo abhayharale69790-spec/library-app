@@ -12,7 +12,9 @@ import {
   Sparkles,
   FlaskConical,
   Settings,
-  BookOpenCheck
+  BookOpenCheck,
+  Building2,
+  CalendarCheck
 } from 'lucide-react';
 import { getDaysRemaining } from '../../utils/dateMath';
 
@@ -22,7 +24,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
-  const { memberships, activeRole } = useLibrary();
+  const { memberships, activeRole, currentBranch, isCloudConnected } = useLibrary();
 
   // Compute live badges
   const expiringCount = memberships.filter(m => {
@@ -43,20 +45,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => 
     { id: 'expenses', label: 'Expenses & P&L', icon: Receipt },
     { id: 'studentportal', label: 'Student Self-Portal', icon: GraduationCap },
     { id: 'analytics', label: 'AI Intelligence', icon: Sparkles },
-    { id: 'tests', label: '35-Point Bible Suite', icon: FlaskConical, badge: '35 Tests', badgeColor: 'var(--brand-primary)' },
-    { id: 'settings', label: 'Settings & Data', icon: Settings },
+    { id: 'tests', label: '42-Scenario Suite', icon: FlaskConical, badge: '42 Tests', badgeColor: 'var(--brand-primary)' },
+    { id: 'settings', label: 'Settings & Cloud DB', icon: Settings },
   ];
 
   return (
-    <aside style={{
-      width: '240px',
-      backgroundColor: 'var(--bg-sidebar)',
-      borderRight: '1px solid var(--border-subtle)',
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      flexShrink: 0,
-    }}>
+    <aside 
+      className="desktop-sidebar"
+      style={{
+        width: '240px',
+        backgroundColor: 'var(--bg-sidebar)',
+        borderRight: '1px solid var(--border-subtle)',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        flexShrink: 0,
+      }}
+    >
       {/* Brand Logo Header */}
       <div style={{
         padding: '20px 20px 16px',
@@ -78,113 +83,88 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => 
           <BookOpenCheck size={22} color="#ffffff" />
         </div>
         <div>
-          <div style={{ fontWeight: 800, fontSize: '16px', letterSpacing: '-0.02em', color: '#ffffff' }}>
-            24<span style={{ color: '#60a5fa' }}>LIBRARY</span>
-          </div>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Shift Space OS
-          </div>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+            24<span style={{ color: 'var(--brand-primary)' }}>Library</span>
+          </h2>
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Enterprise v2.0
+          </p>
         </div>
       </div>
 
       {/* Navigation List */}
-      <nav style={{
-        flex: 1,
-        padding: '12px 10px',
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-      }}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentView === item.id;
+      <nav style={{ flex: 1, padding: '16px 10px', overflowY: 'auto' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 10px 8px' }}>
+          Navigation ({activeRole})
+        </p>
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                borderRadius: 'var(--radius-md)',
-                border: 'none',
-                background: isActive ? 'var(--brand-primary)' : 'transparent',
-                color: isActive ? '#ffffff' : 'var(--text-secondary)',
-                fontSize: '13px',
-                fontWeight: isActive ? 700 : 500,
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all var(--transition-fast)',
-                fontFamily: 'var(--font-main)',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.color = 'var(--text-primary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                }
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Icon size={18} color={isActive ? '#ffffff' : 'var(--text-muted)'} />
-                <span>{item.label}</span>
-              </div>
-              {item.badge && (
-                <span style={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  borderRadius: 'var(--radius-full)',
-                  background: isActive ? 'rgba(255, 255, 255, 0.25)' : (item.badgeColor || 'var(--bg-surface-elevated)'),
-                  color: isActive ? '#ffffff' : '#ffffff',
-                }}>
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentView === item.id;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => onNavigate(item.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: isActive ? 'var(--bg-surface-elevated)' : 'transparent',
+                  color: isActive ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                  border: isActive ? '1px solid var(--border-medium)' : '1px solid transparent',
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: '13px',
+                  textAlign: 'left',
+                  width: '100%',
+                  transition: 'all var(--transition-fast)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Icon size={18} color={isActive ? 'var(--brand-primary)' : 'currentColor'} />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 'var(--radius-full)',
+                    backgroundColor: item.badgeColor || 'var(--brand-primary)',
+                    color: '#ffffff',
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      {/* Role / Session Footer */}
+      {/* Footer Status */}
       <div style={{
         padding: '14px 16px',
         borderTop: '1px solid var(--border-subtle)',
-        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        backgroundColor: 'var(--bg-card)',
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
+        justifyContent: 'space-between',
       }}>
-        <div style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '50%',
-          background: 'var(--bg-surface-elevated)',
-          border: '1px solid var(--border-medium)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px',
-          fontWeight: 700,
-          color: 'var(--brand-primary)',
-        }}>
-          {activeRole.substring(0, 2)}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {activeRole} Console
-          </div>
-          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-            Dadar Hub Manager
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: isCloudConnected ? 'var(--status-success)' : 'var(--status-warning)',
+            boxShadow: isCloudConnected ? '0 0 8px var(--status-success)' : 'none',
+          }} />
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {isCloudConnected ? 'Cloud Sync 🟢' : 'Local Standalone 🟡'}
+          </span>
         </div>
       </div>
     </aside>

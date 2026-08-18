@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLibrary } from '../../state/libraryStore';
 import { 
   Building2, 
@@ -11,9 +11,12 @@ import {
   Sun,
   Moon,
   Cloud,
-  CloudOff
+  CloudOff,
+  Bell,
+  ChevronDown
 } from 'lucide-react';
 import { Role } from '../../types';
+import { NotificationCenterModal } from './NotificationCenterModal';
 
 interface HeaderProps {
   onOpenAddMember: () => void;
@@ -34,10 +37,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) =
     seats,
     branchOccupancyRate,
     isCloudConnected,
-    cloudSyncStatusText,
+    notifications,
   } = useLibrary();
 
-  const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showClockMenu, setShowClockMenu] = useState(false);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -45,7 +50,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) =
     document.documentElement.setAttribute('data-theme', next);
   };
 
-  // Find which shift is active right now based on simulated time
   const currentActiveShift = shifts.find(s => {
     if (s.branchId !== currentBranch.id) return false;
     if (s.startTime === '00:00' && s.endTime === '23:59') return false;
@@ -55,219 +59,226 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) =
     const [eH, eM] = s.endTime.split(':').map(n => parseInt(n, 10));
     const sMin = sH * 60 + sM;
     const eMin = eH * 60 + eM;
-    if (eMin <= sMin) { // Overnight
+    if (eMin <= sMin) {
       return nowMin >= sMin || nowMin <= eMin;
     }
     return nowMin >= sMin && nowMin <= eMin;
   });
 
-  const branchSeatsCount = seats.filter(s => s.branchId === currentBranch.id).length;
-
   return (
-    <header style={{
-      height: '68px',
-      backgroundColor: 'var(--bg-card)',
-      borderBottom: '1px solid var(--border-subtle)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 24px',
-      gap: '16px',
-      zIndex: 50,
-    }}>
-      {/* Left: Branch Switcher & Active Shift Indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+    <>
+      <header 
+        style={{
+          height: 'var(--header-height-mobile)',
+          backgroundColor: 'var(--bg-card)',
+          borderBottom: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          gap: '12px',
+          zIndex: 50,
+          flexShrink: 0,
+        }}
+      >
+        {/* Left: Mobile Title / Branch Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brand-primary)', letterSpacing: '-0.03em' }}>
+              24<span style={{ color: 'var(--text-primary)' }}>Library</span>
+            </span>
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <select
+              value={currentBranch.id}
+              onChange={(e) => setCurrentBranchId(e.target.value)}
+              style={{
+                padding: '4px 24px 4px 8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                background: 'var(--bg-surface-elevated)',
+                borderColor: 'var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                maxWidth: '130px',
+                textOverflow: 'ellipsis',
+                appearance: 'none',
+              }}
+            >
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={12} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+          </div>
+        </div>
+
+        {/* Right: Role Switcher, Clock Trigger, Notifications, Add */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Building2 size={20} color="var(--brand-primary)" />
+          {/* Persona Switcher Pill */}
           <select
-            value={currentBranch.id}
-            onChange={(e) => setCurrentBranchId(e.target.value)}
-            className="form-control"
+            value={activeRole}
+            onChange={(e) => setActiveRole(e.target.value as Role)}
             style={{
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: 600,
-              width: 'auto',
-              minWidth: '220px',
-              background: 'var(--bg-input)',
-              borderColor: 'var(--border-medium)',
+              padding: '4px 8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              background: activeRole === 'STAFF' 
+                ? 'rgba(59, 130, 246, 0.15)' 
+                : activeRole === 'STUDENT' 
+                  ? 'rgba(236, 72, 153, 0.15)' 
+                  : 'rgba(16, 185, 129, 0.15)',
+              color: activeRole === 'STAFF' 
+                ? '#3b82f6' 
+                : activeRole === 'STUDENT' 
+                  ? '#ec4899' 
+                  : '#10b981',
+              borderColor: 'transparent',
+              borderRadius: 'var(--radius-full)',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
             }}
           >
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>
-                📍 {b.name} ({b.code})
-              </option>
-            ))}
+            <option value="STAFF">Staff</option>
+            <option value="STUDENT">Student</option>
+            <option value="ADMIN">Admin</option>
           </select>
-        </div>
 
-        {/* Shift Badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-full)',
-          background: 'var(--bg-surface-elevated)',
-          border: '1px solid var(--border-medium)',
-          fontSize: '12px',
-        }}>
-          <span style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: currentActiveShift ? currentActiveShift.color : 'var(--status-warning)',
-            boxShadow: `0 0 8px ${currentActiveShift ? currentActiveShift.color : 'var(--status-warning)'}`,
-          }} />
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-            {currentActiveShift ? currentActiveShift.name.split(' (')[0] : 'Intermission / 24h Pass'}
-          </span>
-        </div>
+          {/* Time Clock Badge (Click to adjust) */}
+          <button
+            onClick={() => setShowClockMenu(!showClockMenu)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: '12px',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600
+            }}
+            title="Simulated Library Clock"
+          >
+            <Clock size={13} color="var(--brand-primary)" />
+            <span>{simulatedClockTime}</span>
+          </button>
 
-        {/* Live Occupancy Counter */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-full)',
-          background: 'var(--status-success-bg)',
-          border: '1px solid rgba(16, 185, 129, 0.3)',
-          fontSize: '12px',
-        }}>
-          <UserCheck size={14} color="var(--status-success)" />
-          <span style={{ color: 'var(--status-success)', fontWeight: 700 }}>
-            {insideAttendanceCount} / {branchSeatsCount} Inside ({branchOccupancyRate}%)
-          </span>
-        </div>
+          {/* Notifications Bell */}
+          <button
+            onClick={() => setShowNotifications(true)}
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-secondary)',
+              position: 'relative'
+            }}
+            aria-label="Notifications"
+          >
+            <Bell size={17} />
+            {notifications.length > 0 && (
+              <span 
+                style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  width: '15px',
+                  height: '15px',
+                  borderRadius: '50%',
+                  background: 'var(--status-danger)',
+                  color: '#fff',
+                  fontSize: '9px',
+                  fontWeight: '800',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid var(--bg-card)'
+                }}
+              >
+                {notifications.length}
+              </span>
+            )}
+          </button>
 
-        {/* Cloud Sync Status Badge */}
-        <button
-          onClick={() => onNavigate('settings')}
+          {/* Desktop Add Member Button */}
+          <button
+            onClick={onOpenAddMember}
+            className="btn-primary"
+            style={{
+              display: 'none',
+              padding: '0 14px',
+              minHeight: '36px',
+              fontSize: '13px'
+            }}
+          >
+            <Plus size={15} /> Add
+          </button>
+        </div>
+      </header>
+
+      {/* Clock Simulator Quick Picker Dropdown */}
+      {showClockMenu && (
+        <div 
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 10px',
-            borderRadius: 'var(--radius-full)',
-            background: isCloudConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-            border: `1px solid ${isCloudConnected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
-            fontSize: '11.5px',
-            fontWeight: 700,
-            color: isCloudConnected ? 'var(--status-success)' : 'var(--status-warning)',
-            cursor: 'pointer',
+            position: 'fixed',
+            top: 'calc(var(--header-height-mobile) + 8px)',
+            right: '16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-medium)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px',
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+            width: '260px'
           }}
-          title={cloudSyncStatusText + ' (Click to manage Cloud DB)'}
         >
-          {isCloudConnected ? <Cloud size={13} /> : <CloudOff size={13} />}
-          <span>{isCloudConnected ? 'Cloud PostgreSQL' : 'Local Offline'}</span>
-        </button>
-      </div>
-
-      {/* Right: Simulated Clock, Role Switcher & Quick Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Time Simulator Clock */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: 'var(--bg-input)',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-medium)',
-        }} title="Simulate library gate clock time">
-          <Clock size={14} color="var(--text-muted)" />
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>TIME:</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700' }}>Simulate Clock</span>
+            <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{simulatedClockTime}</span>
+          </div>
           <input
             type="time"
             value={simulatedClockTime}
             onChange={(e) => setSimulatedClockTime(e.target.value)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '13px',
-              fontWeight: 700,
-              outline: 'none',
-              cursor: 'pointer',
-            }}
+            className="form-input"
+            style={{ minHeight: '36px', marginBottom: '8px', fontSize: '13px' }}
           />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+            {['08:30', '13:00', '17:30', '21:00', '02:00', '06:00'].map(t => (
+              <button
+                key={t}
+                onClick={() => {
+                  setSimulatedClockTime(t);
+                  setShowClockMenu(false);
+                }}
+                className="btn-secondary"
+                style={{ minHeight: '28px', padding: '0 4px', fontSize: '11px', justifyContent: 'center' }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
+      )}
 
-        {/* Role Selector */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          background: 'var(--bg-surface-elevated)',
-          padding: '4px',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-medium)',
-        }}>
-          <ShieldCheck size={14} color="var(--text-muted)" style={{ marginLeft: '4px' }} />
-          {(['ADMIN', 'OWNER', 'STAFF', 'STUDENT'] as Role[]).map(role => (
-            <button
-              key={role}
-              onClick={() => {
-                setActiveRole(role);
-                if (role === 'STUDENT') onNavigate('studentportal');
-              }}
-              style={{
-                padding: '3px 8px',
-                fontSize: '11px',
-                fontWeight: activeRole === role ? 700 : 500,
-                borderRadius: 'var(--radius-sm)',
-                border: 'none',
-                cursor: 'pointer',
-                background: activeRole === role ? 'var(--brand-primary)' : 'transparent',
-                color: activeRole === role ? '#ffffff' : 'var(--text-secondary)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          className="btn btn-ghost btn-sm"
-          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
-          style={{ padding: '6px 8px' }}
-        >
-          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
-
-        {/* Action Buttons */}
-        <button
-          onClick={() => onNavigate('gate')}
-          className="btn btn-secondary btn-sm"
-          style={{ gap: '6px' }}
-        >
-          <QrCode size={15} color="var(--status-info)" />
-          <span>QR Gate</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('tests')}
-          className="btn btn-secondary btn-sm"
-          style={{ gap: '6px' }}
-        >
-          <FlaskConical size={15} color="var(--status-warning)" />
-          <span>35-Test Suite</span>
-        </button>
-
-        <button
-          onClick={onOpenAddMember}
-          className="btn btn-primary btn-sm"
-          style={{ gap: '6px' }}
-        >
-          <Plus size={16} />
-          <span>Add Member</span>
-        </button>
-      </div>
-    </header>
+      {/* Notifications Slide-Up */}
+      <NotificationCenterModal
+        isOpen={showNotifications}
+        onClose={() => setShowNotifications(false)}
+      />
+    </>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LibraryProvider, useLibrary } from './state/libraryStore';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
+import { BottomNav } from './components/layout/BottomNav';
 import { AdminDashboard } from './components/dashboard/AdminDashboard';
 import { SeatMapGrid } from './components/seatmap/SeatMapGrid';
 import { MemberList } from './components/members/MemberList';
@@ -31,7 +32,7 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* Left Sidebar */}
+      {/* Left Desktop Sidebar (>=1024px) */}
       <Sidebar
         currentView={currentView}
         onNavigate={(view) => setCurrentView(view)}
@@ -100,6 +101,13 @@ const MainApp: React.FC = () => {
             <SettingsView />
           )}
         </main>
+
+        {/* Role-Aware Mobile Bottom Navigation (<1024px) */}
+        <BottomNav
+          currentView={currentView}
+          onNavigate={(view) => setCurrentView(view)}
+          onOpenAddMember={() => setShowAddMember(true)}
+        />
       </div>
 
       {/* Onboarding Wizard Modal */}

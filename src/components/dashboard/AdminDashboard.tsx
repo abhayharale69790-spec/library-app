@@ -12,9 +12,12 @@ import {
   Receipt,
   ArrowUpRight,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import { getDaysRemaining, formatDateDisplay } from '../../utils/dateMath';
+import { StaffMobileHome } from './StaffMobileHome';
+import { StudentMobileHome } from '../memberportal/StudentMobileHome';
 
 interface AdminDashboardProps {
   onNavigate: (view: string) => void;
@@ -41,7 +44,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     insideAttendanceCount,
     branchOccupancyRate,
     sendWhatsAppNotification,
+    activeRole,
   } = useLibrary();
+
+  // Role-Specific Mobile-First Experiences
+  if (activeRole === 'STAFF') {
+    return (
+      <StaffMobileHome
+        onNavigate={onNavigate}
+        onOpenAddMember={onOpenAddMember}
+        onOpenMemberDetail={onOpenMemberDetail}
+      />
+    );
+  }
+
+  if (activeRole === 'STUDENT') {
+    return (
+      <StudentMobileHome
+        onOpenQrPass={() => onNavigate('gate')}
+        onOpenAttendance={() => onNavigate('studentportal')}
+        onOpenPayments={() => onNavigate('payments')}
+        onOpenSeatDetails={() => onNavigate('seatmap')}
+      />
+    );
+  }
 
   // Branch-scoped calculations
   const branchMembers = members.filter(m => m.branchId === currentBranch.id);

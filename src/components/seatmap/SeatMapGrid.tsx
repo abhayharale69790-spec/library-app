@@ -10,7 +10,12 @@ import {
   Filter, 
   Sparkles,
   Calendar,
-  Layers
+  Layers,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  Eye,
+  Plus
 } from 'lucide-react';
 import { SeatDetailModal } from './SeatDetailModal';
 import { getDaysRemaining } from '../../utils/dateMath';
@@ -31,17 +36,15 @@ export const SeatMapGrid: React.FC<SeatMapGridProps> = ({ onOpenMemberDetail }) 
   } = useLibrary();
 
   const [selectedZone, setSelectedZone] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'AVAILABLE' | 'OCCUPIED' | 'BLOCKED'>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeModalSeat, setActiveModalSeat] = useState<Seat | null>(null);
 
   // Active shift object
   const activeShift = shifts.find(s => s.id === selectedShiftFilter) || shifts[0];
 
-  // Filter seats by branch and zone
+  // Filter seats by branch
   const branchSeats = seats.filter(s => s.branchId === currentBranch.id);
-  const displayedSeats = branchSeats.filter(s => {
-    if (selectedZone !== 'ALL' && s.zone !== selectedZone) return false;
-    return true;
-  });
 
   // Calculate shift stats
   const totalShiftAssignments = assignments.filter(
@@ -51,271 +54,201 @@ export const SeatMapGrid: React.FC<SeatMapGridProps> = ({ onOpenMemberDetail }) 
   const blockedCount = branchSeats.filter(s => s.isBlocked).length;
   const availableCount = Math.max(0, branchSeats.length - occupiedCount - blockedCount);
 
-  // Group seats by Zone for organized floor visualizer
-  const zones: SeatZone[] = ['AC Quiet', 'Deluxe Cubicle', 'Standard', 'Discussion'];
+  // Filtered seats list
+  const filteredSeats = branchSeats.filter(seat => {
+    // Zone filter
+    if (selectedZone !== 'ALL' && seat.zone !== selectedZone) return false;
+
+    // Assignment for this seat in active shift
+    const assignment = totalShiftAssignments.find(a => a.seatId === seat.id);
+    const isOccupied = !!assignment;
+    const isBlocked = !!seat.isBlocked;
+
+    // Status filter
+    if (statusFilter === 'AVAILABLE' && (isOccupied || isBlocked)) return false;
+    if (statusFilter === 'OCCUPIED' && !isOccupied) return false;
+    if (statusFilter === 'BLOCKED' && !isBlocked) return false;
+
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchLabel = seat.label.toLowerCase().includes(q);
+      const member = assignment ? members.find(m => m.id === assignment.memberId) : null;
+      const matchMember = member ? member.fullName.toLowerCase().includes(q) || member.memberCode.toLowerCase().includes(q) : false;
+      if (!matchLabel && !matchMember) return false;
+    }
+
+    return true;
+  });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Top Header & Shift Switcher */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '16px',
-      }}>
-        <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800 }}>
-            Dynamic Shift Seat Matrix
-          </h1>
-          <p style={{ fontSize: '13px', marginTop: '2px' }}>
-            Visual floor layout reflecting time-multiplexed physical space inventory
-          </p>
-        </div>
-
-        {/* Legend */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '8px 16px',
-          background: 'var(--bg-card)',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-subtle)',
-          fontSize: '12px',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--status-success)' }} />
-            <span>Available ({availableCount})</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--brand-primary)' }} />
-            <span>Occupied ({occupiedCount})</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--status-warning)' }} />
-            <span>Expiring &lt;7d</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--seat-blocked)' }} />
-            <span>Blocked ({blockedCount})</span>
-          </div>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1100px', margin: '0 auto' }}>
+      {/* 1. Header & Title */}
+      <div>
+        <h1 style={{ fontSize: '20px', fontWeight: 800 }}>
+          Shift Seat Inventory
+        </h1>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+          {currentBranch.name} • {availableCount} available out of {branchSeats.length} desks
+        </p>
       </div>
 
-      {/* Shift Switcher Bar */}
-      <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1 }}>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginRight: '4px' }}>
-            Shift Filter:
-          </span>
-          {shifts.map(shift => {
-            const isSelected = selectedShiftFilter === shift.id;
-            return (
-              <button
-                key={shift.id}
-                onClick={() => setSelectedShiftFilter(shift.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: isSelected ? `2px solid ${shift.color}` : '1px solid var(--border-medium)',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-input)',
-                  color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                  fontSize: '13px',
-                  fontWeight: isSelected ? 700 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span style={{
-                  width: '9px',
-                  height: '9px',
-                  borderRadius: '50%',
-                  backgroundColor: shift.color,
-                }} />
-                <span>{shift.name.split(' (')[0]}</span>
-                <span className="mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  ({shift.startTime} - {shift.endTime})
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Zone Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Layers size={14} color="var(--text-muted)" />
-          <select
-            value={selectedZone}
-            onChange={(e) => setSelectedZone(e.target.value)}
-            className="form-control"
-            style={{ width: 'auto', padding: '6px 10px', fontSize: '12px' }}
+      {/* 2. Shift Selector Pills (Horizontal Scroll on Mobile) */}
+      <div className="pill-selector">
+        {shifts.filter(s => s.branchId === currentBranch.id).map(shift => (
+          <button
+            key={shift.id}
+            onClick={() => setSelectedShiftFilter(shift.id)}
+            className={`pill-item ${selectedShiftFilter === shift.id ? 'active' : ''}`}
           >
-            <option value="ALL">All Zones (4 Zones)</option>
-            {zones.map(z => (
-              <option key={z} value={z}>{z}</option>
-            ))}
-          </select>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: shift.color || '#3b82f6' }} />
+            <span>{shift.name.split(' ')[0]}</span>
+            <span style={{ fontSize: '11px', opacity: 0.8 }}>({shift.startTime}-{shift.endTime})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 3. Search & Filter Controls */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Search Bar */}
+        <div style={{ position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search desk number (e.g. A-22) or student..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="form-input"
+            style={{ paddingLeft: '38px', minHeight: '44px', fontSize: '14px' }}
+          />
+        </div>
+
+        {/* Status Filter Chips */}
+        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+          {[
+            { id: 'ALL', label: `All (${branchSeats.length})` },
+            { id: 'AVAILABLE', label: `Available (${availableCount})` },
+            { id: 'OCCUPIED', label: `Occupied (${occupiedCount})` },
+            { id: 'BLOCKED', label: `Blocked (${blockedCount})` },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id as any)}
+              className={`pill-item ${statusFilter === f.id ? 'active' : ''}`}
+              style={{ minHeight: '32px', padding: '4px 12px', fontSize: '12px' }}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Visual Floor Plan Grouped by Zone */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {zones.map(zone => {
-          const zoneSeats = displayedSeats.filter(s => s.zone === zone);
-          if (zoneSeats.length === 0) return null;
+      {/* 4. Compact Mobile Seat Grid (2-columns on mobile, responsive grid on desktop) */}
+      <div 
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+          gap: '10px',
+        }}
+      >
+        {filteredSeats.map(seat => {
+          const assignment = totalShiftAssignments.find(a => a.seatId === seat.id);
+          const member = assignment ? members.find(m => m.id === assignment.memberId) : null;
+          const isOccupied = !!assignment;
+          const isBlocked = !!seat.isBlocked;
+
+          let statusColor = 'var(--status-success)';
+          let statusBg = 'var(--status-success-bg)';
+          let statusText = 'Available';
+
+          if (isBlocked) {
+            statusColor = 'var(--status-danger)';
+            statusBg = 'var(--status-danger-bg)';
+            statusText = 'Blocked';
+          } else if (isOccupied) {
+            statusColor = 'var(--brand-primary)';
+            statusBg = 'var(--brand-primary-bg)';
+            statusText = 'Occupied';
+          }
 
           return (
-            <div key={zone} className="card" style={{ padding: '20px' }}>
-              {/* Zone Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 800 }}>
-                    {zone === 'AC Quiet' && '❄️ '}
-                    {zone === 'Deluxe Cubicle' && '👑 '}
-                    {zone === 'Standard' && '📖 '}
-                    {zone === 'Discussion' && '☕ '}
-                    {zone}
-                  </h3>
-                  <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
-                    {zoneSeats.length} Desks
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Active Shift: <strong style={{ color: activeShift.color }}>{activeShift.name.split(' (')[0]}</strong>
-                </div>
+            <div
+              key={seat.id}
+              onClick={() => setActiveModalSeat(seat)}
+              className="mobile-card mobile-card-interactive"
+              style={{
+                margin: 0,
+                padding: '12px',
+                border: `1px solid ${isOccupied ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-subtle)'}`,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                minHeight: '120px',
+                position: 'relative'
+              }}
+            >
+              {/* Header: Label & Status Dot */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                  {seat.label}
+                </span>
+                <span 
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: '700',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: statusBg,
+                    color: statusColor,
+                    textTransform: 'uppercase'
+                  }}
+                >
+                  {statusText}
+                </span>
               </div>
 
-              {/* Grid of Desks */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                gap: '12px',
-              }}>
-                {zoneSeats.map(seat => {
-                  const assignment = assignments.find(
-                    a => a.seatId === seat.id && a.shiftId === activeShift.id && a.status === 'ACTIVE'
-                  );
-                  const occupant = assignment ? members.find(m => m.id === assignment.memberId) : undefined;
-                  const daysLeft = assignment ? getDaysRemaining(assignment.endDate) : 0;
-                  const isExpiringSoon = assignment && daysLeft >= 0 && daysLeft <= 7;
-                  const isBlocked = seat.isBlocked || seat.status === 'BLOCKED';
+              {/* Body: Zone & Occupant Name */}
+              <div style={{ margin: '8px 0' }}>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {seat.zone}
+                </p>
+                {isOccupied && member ? (
+                  <p style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {member.fullName}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: '12px', color: isBlocked ? 'var(--status-danger)' : 'var(--status-success)', marginTop: '2px', fontWeight: '600' }}>
+                    {isBlocked ? 'Out of service' : 'Ready for assignment'}
+                  </p>
+                )}
+              </div>
 
-                  // Desk Color Theme
-                  let cardBg = 'rgba(16, 185, 129, 0.08)';
-                  let cardBorder = 'rgba(16, 185, 129, 0.3)';
-                  let iconColor = 'var(--status-success)';
-
-                  if (isBlocked) {
-                    cardBg = 'rgba(100, 116, 139, 0.1)';
-                    cardBorder = 'rgba(100, 116, 139, 0.3)';
-                    iconColor = 'var(--seat-blocked)';
-                  } else if (occupant) {
-                    if (isExpiringSoon) {
-                      cardBg = 'rgba(245, 158, 11, 0.12)';
-                      cardBorder = 'rgba(245, 158, 11, 0.4)';
-                      iconColor = 'var(--status-warning)';
-                    } else {
-                      cardBg = 'rgba(59, 130, 246, 0.12)';
-                      cardBorder = 'rgba(59, 130, 246, 0.4)';
-                      iconColor = 'var(--brand-primary)';
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={seat.id}
-                      onClick={() => setActiveModalSeat(seat)}
-                      style={{
-                        padding: '12px',
-                        borderRadius: 'var(--radius-md)',
-                        background: cardBg,
-                        border: `1px solid ${cardBorder}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        minHeight: '105px',
-                        transition: 'all 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                      {/* Top: Desk Label & Amenities */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Armchair size={15} color={iconColor} />
-                          <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>
-                            {seat.label}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          {seat.powerSocket && <span title="Power Socket"><Zap size={11} color="var(--status-warning)" /></span>}
-                          {seat.hasLocker && <span title="Personal Locker"><Lock size={11} color="var(--status-info)" /></span>}
-                        </div>
-                      </div>
-
-                      {/* Middle: Occupant / Status */}
-                      <div style={{ margin: '6px 0' }}>
-                        {isBlocked ? (
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                            🚫 Blocked
-                          </div>
-                        ) : occupant ? (
-                          <div>
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {occupant.fullName.split(' ')[0]}
-                            </div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                              {occupant.memberCode.split('-')[2]}
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '11px', color: 'var(--status-success)', fontWeight: 600 }}>
-                            🟢 Available
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Bottom Status Tag */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px' }}>
-                        {occupant ? (
-                          <span style={{
-                            fontWeight: 700,
-                            color: isExpiringSoon ? 'var(--status-warning)' : 'var(--text-secondary)',
-                          }}>
-                            {daysLeft < 0 ? 'Expired' : `${daysLeft}d left`}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>Click to assign</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              {/* Footer: Quick Action Tag */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  {seat.powerSocket ? '⚡ Socket' : 'Standard'}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  {isOccupied ? 'View' : 'Assign'} &rarr;
+                </span>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Seat Detail / Assign / Transfer Modal */}
+      {filteredSeats.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+          <Armchair size={36} style={{ opacity: 0.3, marginBottom: '10px' }} />
+          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>No desks match your filter</p>
+          <p style={{ fontSize: '12px', marginTop: '2px' }}>Try switching shifts or clearing the search query.</p>
+        </div>
+      )}
+
+      {/* 5. Seat Action Bottom Sheet */}
       {activeModalSeat && (
         <SeatDetailModal
           seat={activeModalSeat}
-          activeShift={activeShift}
           onClose={() => setActiveModalSeat(null)}
           onOpenMemberDetail={onOpenMemberDetail}
         />

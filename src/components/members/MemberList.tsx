@@ -11,7 +11,10 @@ import {
   Armchair,
   CheckCircle2,
   Filter,
-  UserCheck
+  UserCheck,
+  ChevronRight,
+  Phone,
+  MessageSquare
 } from 'lucide-react';
 import { formatDateDisplay, getDaysRemaining } from '../../utils/dateMath';
 
@@ -37,7 +40,7 @@ export const MemberList: React.FC<MemberListProps> = ({
   } = useLibrary();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'EXPIRING_1_7' | 'EXPIRING_8_15' | 'EXPIRED' | 'OVERDUE'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'OVERDUE'>('ALL');
 
   const branchMembers = members.filter(m => m.branchId === currentBranch.id);
 
@@ -49,8 +52,7 @@ export const MemberList: React.FC<MemberListProps> = ({
 
     // Filter Type Logic
     if (filterType === 'ACTIVE' && (member.status !== 'ACTIVE' || daysLeft < 0)) return false;
-    if (filterType === 'EXPIRING_1_7' && (daysLeft < 0 || daysLeft > 7)) return false;
-    if (filterType === 'EXPIRING_8_15' && (daysLeft < 8 || daysLeft > 15)) return false;
+    if (filterType === 'EXPIRING' && (daysLeft < 0 || daysLeft > 7)) return false;
     if (filterType === 'EXPIRED' && (daysLeft >= 0 && member.status !== 'EXPIRED')) return false;
     if (filterType === 'OVERDUE' && !isOverdue) return false;
 
@@ -67,255 +69,248 @@ export const MemberList: React.FC<MemberListProps> = ({
     return true;
   });
 
-  const handleWhatsApp = (memberId: string, daysLeft: number) => {
-    const { url } = sendWhatsAppNotification(memberId, daysLeft <= 3 ? 'EXPIRY_REMINDER_3D' : 'EXPIRY_REMINDER_7D');
-    window.open(url, '_blank');
-  };
+  // Calculate quick stats
+  const activeCount = branchMembers.filter(m => m.status === 'ACTIVE').length;
+  const expiringCount = branchMembers.filter(m => {
+    const msh = memberships.find(x => x.memberId === m.id);
+    const d = msh ? getDaysRemaining(msh.endDate) : -1;
+    return d >= 0 && d <= 7;
+  }).length;
+  const overdueCount = branchMembers.filter(m => {
+    const msh = memberships.find(x => x.memberId === m.id);
+    return (msh?.dueAmount || 0) > 0;
+  }).length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Top Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '16px',
-      }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1100px', margin: '0 auto' }}>
+      {/* 1. Header & Title */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800 }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 800 }}>
             Scholar Directory
           </h1>
-          <p style={{ fontSize: '13px', marginTop: '2px' }}>
-            Manage student registrations, reserved seats, fees, and validity
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            {branchMembers.length} scholars enrolled in {currentBranch.name}
           </p>
         </div>
 
-        <button onClick={onOpenAddMember} className="btn btn-primary btn-sm" style={{ gap: '6px' }}>
-          <Plus size={16} />
-          <span>New Admission</span>
+        <button 
+          onClick={onOpenAddMember} 
+          className="btn-primary"
+          style={{ width: 'auto', minHeight: '40px', padding: '0 16px', fontSize: '13px' }}
+        >
+          <Plus size={16} /> + New Member
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Search Input */}
-          <div style={{
-            position: 'relative',
-            flex: 1,
-            minWidth: '240px',
-          }}>
-            <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              type="text"
-              placeholder="Search by student name, phone, code (e.g. 24L-MUM), exam..."
-              className="form-control"
-              style={{ paddingLeft: '36px' }}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+      {/* 2. Search & Filter Bar */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search student name, ID, phone, or exam..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="form-input"
+            style={{ paddingLeft: '38px', minHeight: '44px', fontSize: '14px' }}
+          />
+        </div>
 
-          {/* Quick Filter Chips */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto' }}>
-            {[
-              { id: 'ALL', label: 'All Scholars' },
-              { id: 'ACTIVE', label: 'Active' },
-              { id: 'EXPIRING_1_7', label: 'Expiring <7d' },
-              { id: 'EXPIRING_8_15', label: 'Expiring 8-15d' },
-              { id: 'EXPIRED', label: 'Expired' },
-              { id: 'OVERDUE', label: 'Pending Dues' },
-            ].map(chip => (
-              <button
-                key={chip.id}
-                onClick={() => setFilterType(chip.id as unknown as typeof filterType)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-full)',
-                  border: filterType === chip.id ? '1px solid var(--brand-primary)' : '1px solid var(--border-medium)',
-                  background: filterType === chip.id ? 'var(--brand-primary)' : 'var(--bg-input)',
-                  color: filterType === chip.id ? '#ffffff' : 'var(--text-secondary)',
-                  fontSize: '12px',
-                  fontWeight: filterType === chip.id ? 700 : 500,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
+        {/* Filter Pills */}
+        <div className="pill-selector">
+          {[
+            { id: 'ALL', label: `All (${branchMembers.length})` },
+            { id: 'ACTIVE', label: `Active (${activeCount})` },
+            { id: 'EXPIRING', label: `Expiring (${expiringCount})` },
+            { id: 'OVERDUE', label: `Due (${overdueCount})` },
+            { id: 'EXPIRED', label: 'Expired' },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilterType(f.id as any)}
+              className={`pill-item ${filterType === f.id ? 'active' : ''}`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Directory Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+      {/* 3. Mobile Card List (Transformed from table on mobile) */}
+      <div className="mobile-cards-container">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filteredMembers.map(member => {
+            const msh = memberships.find(m => m.memberId === member.id && m.status !== 'CANCELLED');
+            const assignment = assignments.find(a => a.memberId === member.id && a.status === 'ACTIVE');
+            const seat = assignment ? seats.find(s => s.id === assignment.seatId) : undefined;
+            const shift = assignment ? shifts.find(s => s.id === assignment.shiftId) : undefined;
+            const daysLeft = msh ? getDaysRemaining(msh.endDate) : 0;
+            const isInside = attendance.some(a => a.memberId === member.id && a.status === 'INSIDE');
+
+            return (
+              <div
+                key={member.id}
+                onClick={() => onOpenMemberDetail(member.id)}
+                className="mobile-card mobile-card-interactive"
+                style={{
+                  margin: 0,
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                {/* Top Row: Avatar + Name + Expiry Badge */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div 
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, var(--brand-primary), #1d4ed8)',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '700',
+                        fontSize: '15px',
+                        flexShrink: 0
+                      }}
+                    >
+                      {member.fullName.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                          {member.fullName}
+                        </h4>
+                        {isInside && (
+                          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--status-success)', boxShadow: '0 0 6px var(--status-success)' }} title="Inside Library" />
+                        )}
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <span className="mono" style={{ color: 'var(--text-secondary)' }}>{member.memberCode}</span> • {member.targetExam || 'General'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className={`badge ${daysLeft <= 3 ? 'badge-warning' : daysLeft < 0 ? 'badge-danger' : 'badge-success'}`}>
+                    {daysLeft < 0 ? 'Expired' : `${daysLeft}d left`}
+                  </span>
+                </div>
+
+                {/* Middle Info Badges: Seat & Shift & Payment */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                  {seat ? (
+                    <span className="badge badge-info">
+                      Desk {seat.label} ({shift?.name.split(' ')[0] || 'Shift'})
+                    </span>
+                  ) : (
+                    <span className="badge badge-neutral">No Seat</span>
+                  )}
+
+                  {msh && msh.dueAmount > 0 ? (
+                    <span className="badge badge-danger">
+                      Due: ₹{msh.dueAmount}
+                    </span>
+                  ) : (
+                    <span className="badge badge-success">
+                      ✓ Paid
+                    </span>
+                  )}
+
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Phone size={11} /> {member.phone}
+                  </span>
+                </div>
+
+                {/* Bottom Row Action Tag */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Joined: {member.joinedDate}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--brand-primary)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    View Profile <ChevronRight size={14} />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 4. Desktop Data Table */}
+      <div className="desktop-table-container">
+        <div className="mobile-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="data-table">
             <thead>
-              <tr style={{
-                background: 'var(--bg-surface-elevated)',
-                borderBottom: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)',
-                textAlign: 'left',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-              }}>
-                <th style={{ padding: '12px 16px' }}>Scholar</th>
-                <th style={{ padding: '12px 16px' }}>Shift & Desk</th>
-                <th style={{ padding: '12px 16px' }}>Validity & Status</th>
-                <th style={{ padding: '12px 16px' }}>Fee Balance</th>
-                <th style={{ padding: '12px 16px' }}>Inside Now</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+              <tr>
+                <th>Scholar</th>
+                <th>Member Code</th>
+                <th>Seat & Shift</th>
+                <th>Validity & Status</th>
+                <th>Payment State</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No scholars found matching the selected filters.
-                  </td>
-                </tr>
-              ) : (
-                filteredMembers.map(member => {
-                  const msh = memberships.find(m => m.memberId === member.id && m.status !== 'CANCELLED');
-                  const asgn = assignments.find(a => a.memberId === member.id && a.status === 'ACTIVE');
-                  const seat = seats.find(s => s.id === asgn?.seatId);
-                  const shift = shifts.find(s => s.id === msh?.shiftId);
-                  const daysLeft = msh ? getDaysRemaining(msh.endDate) : 0;
-                  const isInside = attendance.some(a => a.memberId === member.id && a.status === 'INSIDE' && a.date === new Date().toISOString().split('T')[0]);
+              {filteredMembers.map(member => {
+                const msh = memberships.find(m => m.memberId === member.id && m.status !== 'CANCELLED');
+                const assignment = assignments.find(a => a.memberId === member.id && a.status === 'ACTIVE');
+                const seat = assignment ? seats.find(s => s.id === assignment.seatId) : undefined;
+                const shift = assignment ? shifts.find(s => s.id === assignment.shiftId) : undefined;
+                const daysLeft = msh ? getDaysRemaining(msh.endDate) : 0;
+                const isInside = attendance.some(a => a.memberId === member.id && a.status === 'INSIDE');
 
-                  return (
-                    <tr
-                      key={member.id}
-                      style={{
-                        borderBottom: '1px solid var(--border-subtle)',
-                        transition: 'background-color 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      {/* Scholar Info */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{
-                            width: '34px',
-                            height: '34px',
-                            borderRadius: '50%',
-                            background: 'var(--bg-surface-elevated)',
-                            border: '1px solid var(--border-medium)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '13px',
-                            fontWeight: 700,
-                            color: 'var(--brand-primary)',
-                          }}>
-                            {member.fullName.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div
-                              onClick={() => onOpenMemberDetail(member.id)}
-                              style={{ fontWeight: 700, color: 'var(--text-primary)', cursor: 'pointer' }}
-                            >
-                              {member.fullName}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              <span className="mono">{member.memberCode}</span> • {member.phone}
-                            </div>
-                          </div>
+                return (
+                  <tr key={member.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--brand-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700' }}>
+                          {member.fullName.charAt(0)}
                         </div>
-                      </td>
-
-                      {/* Shift & Seat */}
-                      <td style={{ padding: '14px 16px' }}>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Armchair size={13} color="var(--brand-primary)" />
-                            <strong style={{ color: 'var(--text-primary)' }}>{seat?.label || 'Floating'}</strong>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>({seat?.zone || 'General'})</span>
-                          </div>
-                          <div style={{ fontSize: '11.5px', color: shift?.color || 'var(--text-secondary)', marginTop: '2px', fontWeight: 600 }}>
-                            {shift?.name.split(' (')[0]}
-                          </div>
+                          <strong>{member.fullName}</strong>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{member.phone}</p>
                         </div>
-                      </td>
-
-                      {/* Validity */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: 600 }}>
-                            Till {formatDateDisplay(msh?.endDate || '')}
-                          </div>
-                          <span className={`badge ${daysLeft <= 0 ? 'badge-danger' : daysLeft <= 7 ? 'badge-warning' : 'badge-success'}`} style={{ marginTop: '4px', fontSize: '9.5px' }}>
-                            {daysLeft < 0 ? `Expired (${Math.abs(daysLeft)}d ago)` : daysLeft === 0 ? 'Expires Today' : `${daysLeft} days left`}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Fee Balance */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div>
-                          {(msh?.dueAmount || 0) > 0 ? (
-                            <span style={{ fontWeight: 700, color: 'var(--status-danger)' }}>
-                              ₹{msh?.dueAmount.toLocaleString('en-IN')} Due
-                            </span>
-                          ) : (
-                            <span style={{ fontWeight: 600, color: 'var(--status-success)' }}>
-                              ✓ Paid
-                            </span>
-                          )}
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            Fee: ₹{msh?.totalFee.toLocaleString('en-IN')}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Inside Now */}
-                      <td style={{ padding: '14px 16px' }}>
-                        {isInside ? (
-                          <span className="badge badge-success" style={{ gap: '4px' }}>
-                            <UserCheck size={12} />
-                            INSIDE
-                          </span>
-                        ) : (
-                          <span className="badge badge-neutral" style={{ fontSize: '10px' }}>
-                            OUTSIDE
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                          <button
-                            onClick={() => handleWhatsApp(member.id, daysLeft)}
-                            className="btn btn-ghost btn-sm"
-                            style={{ color: '#25D366', padding: '5px' }}
-                            title="Send WhatsApp Nudge"
-                          >
-                            <Send size={14} />
-                          </button>
-
-                          <button
-                            onClick={() => onOpenMemberDetail(member.id)}
-                            className="btn btn-secondary btn-sm"
-                          >
-                            Profile
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                      </div>
+                    </td>
+                    <td><span className="mono">{member.memberCode}</span></td>
+                    <td>{seat ? `Desk ${seat.label} (${shift?.name.split(' ')[0]})` : 'Floating'}</td>
+                    <td>
+                      <span className={`badge ${daysLeft <= 3 ? 'badge-warning' : daysLeft < 0 ? 'badge-danger' : 'badge-success'}`}>
+                        {daysLeft < 0 ? 'Expired' : `${daysLeft}d left`}
+                      </span>
+                    </td>
+                    <td>
+                      {msh && msh.dueAmount > 0 ? (
+                        <span className="badge badge-danger">Due ₹{msh.dueAmount}</span>
+                      ) : (
+                        <span className="badge badge-success">Paid</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button onClick={() => onOpenMemberDetail(member.id)} className="btn-secondary" style={{ minHeight: '32px', padding: '0 12px', fontSize: '12px' }}>
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
+
+      {filteredMembers.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+          <Users size={36} style={{ opacity: 0.3, marginBottom: '10px' }} />
+          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>No members found</p>
+          <p style={{ fontSize: '12px', marginTop: '2px' }}>Try adjusting your search query or status filter.</p>
+        </div>
+      )}
     </div>
   );
 };
