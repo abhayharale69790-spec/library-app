@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-apk:
     name: Build Android Release & Debug APK
     runs-on: ubuntu-latest
 
@@ -18,11 +18,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install Node Dependencies
+        run: npm ci
 
-      - name: Build Web Production Bundle
+      - name: Build Web Production Assets
         run: npm run build
 
       - name: Setup Java JDK 17
@@ -34,19 +35,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Sync Capacitor Android
+      - name: Sync Capacitor Android Project
         run: npx cap sync android
 
-      - name: Set Permissions for Gradle
-        run: chmod +x android/gradlew
-
-      - name: Build Debug APK with Gradle
+      - name: Build Android Debug APK with Gradle
         working-directory: ./android
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload Android APK
+      - name: Upload Android Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 24Library-Android-APK
+          name: 24Library-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30

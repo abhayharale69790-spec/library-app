@@ -1,0 +1,13 @@
+{
+	"appId": "com.library24.app",
+	"appName": "24Library",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {
+		"allowMixedContent": true,
+		"captureInput": true,
+		"webContentsDebuggingEnabled": true
+	}
+}
