@@ -27,6 +27,7 @@ import { StudentMobileHome } from './StudentMobileHome';
 
 export const StudentPortalView: React.FC = () => {
   const {
+    businessProfile,
     currentBranch,
     members,
     memberships,
@@ -219,7 +220,7 @@ export const StudentPortalView: React.FC = () => {
             }}
           >
             <span className="badge" style={{ background: 'rgba(236, 72, 153, 0.2)', color: 'var(--seat-my-seat)', marginBottom: '12px' }}>
-              OFFICIAL DIGITAL SCHOLAR PASS
+              {businessProfile.name ? `${businessProfile.name.toUpperCase()} • DIGITAL PASS` : 'OFFICIAL DIGITAL SCHOLAR PASS'}
             </span>
 
             <h3 style={{ fontSize: '20px', fontWeight: '800' }}>{member.fullName}</h3>

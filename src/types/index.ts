@@ -4,16 +4,19 @@ export type MembershipStatus = 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'CANCELLED';
 export type PaymentStatus = 'PAID' | 'PARTIAL' | 'OVERDUE' | 'REFUNDED';
 export type SeatAssignmentStatus = 'ACTIVE' | 'TRANSFERRED' | 'EXPIRED' | 'RELEASED';
 export type SeatStatus = 'ACTIVE' | 'MAINTENANCE' | 'BLOCKED';
-export type SeatZone = 'AC Quiet' | 'Standard' | 'Deluxe Cubicle' | 'Discussion';
+export type SeatZone = 'Standard' | 'AC' | 'Premium' | 'Cabin' | 'Discussion' | 'AC Quiet' | 'Deluxe Cubicle';
 export type SeatType = 'FIXED' | 'FLOATING';
 
 export type PaymentMethod = 
   | 'CASH' 
+  | 'UPI'
   | 'UPI_GPAY' 
   | 'UPI_PHONEPE' 
   | 'UPI_PAYTM' 
   | 'CARD' 
-  | 'NETBANKING';
+  | 'BANK_TRANSFER'
+  | 'NETBANKING'
+  | 'OTHER';
 
 export type ExpenseCategory = 
   | 'RENT' 
@@ -24,6 +27,47 @@ export type ExpenseCategory =
   | 'SALARY' 
   | 'TEA_COFFEE' 
   | 'OTHER';
+
+export type BusinessType = 
+  | 'Library' 
+  | 'Study Center' 
+  | 'Reading Room' 
+  | 'Study Hall' 
+  | 'Abhyasika' 
+  | 'Co-Learning Space' 
+  | 'Custom';
+
+export type SeatNamingStyle = 'NUMERIC' | 'ALPHA_NUMERIC' | 'CUSTOM';
+
+export interface BusinessProfile {
+  id: string;
+  name: string; // e.g. "Harale Study Point & Abhyasika"
+  type: BusinessType;
+  shortName: string; // e.g. "HSP"
+  tagline: string;
+  logoUrl?: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  address: string;
+  location?: string;
+  receiptPrefix: string; // e.g. "HSP-"
+  currencySymbol: string; // "₹"
+  gracePeriodMinutes: number; // default: 15
+  requireCheckout: boolean; // default: true
+  enable7dReminder: boolean;
+  enable3dReminder: boolean;
+  enable1dReminder: boolean;
+  workingDays: string[]; // ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  terminology: {
+    studentLabel: string; // "Student" | "Member" | "Scholar"
+    seatLabel: string;    // "Seat" | "Desk" | "Cubicle"
+    planLabel: string;    // "Plan" | "Membership" | "Pass"
+    branchLabel: string;  // "Branch" | "Center" | "Hall"
+  };
+  isConfigured: boolean;
+  createdAt: string;
+}
 
 export interface Organization {
   id: string;
@@ -50,7 +94,7 @@ export interface Branch {
 export interface Shift {
   id: string;
   branchId: string;
-  name: string; // e.g. 'Morning (6 AM - 12 PM)', 'Afternoon', 'Evening', 'Night Owl', 'Full Day (24h)'
+  name: string; // e.g. 'Morning (6 AM - 12 PM)', 'Evening', 'Full Day (24h)'
   startTime: string; // '06:00'
   endTime: string;   // '12:00'
   defaultPrice: number;
@@ -62,7 +106,7 @@ export interface Shift {
 export interface Seat {
   id: string;
   branchId: string;
-  label: string; // e.g. 'A-01', 'B-12'
+  label: string; // e.g. 'A-01', '01', 'B-12'
   row: number;
   col: number;
   zone: SeatZone;
@@ -76,7 +120,7 @@ export interface Seat {
 
 export interface MembershipPlan {
   id: string;
-  name: string; // e.g. 'Monthly Standard', 'Quarterly Pro', 'Half-Yearly Elite', 'Annual Scholar'
+  name: string; // e.g. 'Monthly Standard', 'Quarterly Pro', 'Annual Scholar'
   durationDays: number;
   basePrice: number;
   description: string;
@@ -85,14 +129,15 @@ export interface MembershipPlan {
 
 export interface Member {
   id: string;
-  memberCode: string; // e.g. '24L-MUM-1001'
+  memberCode: string; // e.g. 'MEM-1001'
   branchId: string;
   fullName: string;
   phone: string;
   email: string;
   emergencyContact: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
   idProofNumber?: string;
-  targetExam?: string; // e.g. 'UPSC Civil Services', 'CA Final', 'NEET PG', 'GATE CSE', 'General Study'
+  targetExam?: string; // e.g. 'UPSC Civil Services', 'MPSC', 'CA Final', 'NEET PG', 'General Study'
   photoUrl?: string;
   joinedDate: string;
   status: 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'BLOCKED';
@@ -103,27 +148,26 @@ export interface Member {
 export interface Membership {
   id: string;
   memberId: string;
-  planId: string;
   branchId: string;
+  planId: string;
   shiftId: string;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
-  status: MembershipStatus;
   totalFee: number;
   paidAmount: number;
   dueAmount: number;
+  status: MembershipStatus;
   paymentStatus: PaymentStatus;
   autoRenew: boolean;
-  lastRenewedAt?: string;
+  assignedSeatId?: string;
+  createdAt?: string;
 }
 
 export interface SeatAssignment {
   id: string;
-  memberId: string;
   seatId: string;
+  memberId: string;
   shiftId: string;
-  branchId: string;
-  membershipId: string;
   startDate: string;
   endDate: string;
   status: SeatAssignmentStatus;
@@ -132,41 +176,42 @@ export interface SeatAssignment {
 
 export interface Payment {
   id: string;
-  receiptNo: string; // 'RCP-2026-0081'
+  receiptNo: string; // e.g. 'RCP-2026-0001'
   memberId: string;
   membershipId: string;
   amount: number;
-  paymentDate: string; // YYYY-MM-DD HH:mm
+  paymentDate: string; // YYYY-MM-DD
   method: PaymentMethod;
+  status: PaymentStatus;
   referenceTxnId?: string;
   notes?: string;
-  invoiceUrl?: string;
+  recordedBy: string;
 }
 
 export interface AttendanceRecord {
   id: string;
   memberId: string;
   branchId: string;
-  shiftId: string;
   date: string; // YYYY-MM-DD
   checkInTime: string; // HH:mm:ss
-  checkOutTime?: string;
+  checkOutTime?: string; // HH:mm:ss
   durationMinutes?: number;
-  method: 'QR_SCAN' | 'MANUAL_STAFF' | 'BIOMETRIC';
+  gateId: string;
+  seatLabel?: string;
   status: 'INSIDE' | 'COMPLETED' | 'AUTO_CHECKOUT';
 }
 
 export interface AccessLog {
   id: string;
-  memberId?: string;
-  memberCode?: string;
-  memberName?: string;
-  branchId: string;
   timestamp: string;
+  memberId?: string;
+  memberName?: string;
+  memberCode?: string;
+  branchId: string;
+  gateId: string;
+  action: 'ENTRY' | 'EXIT' | 'DENIED';
   result: 'ALLOWED' | 'DENIED';
   reason: string;
-  gateId: string;
-  shiftId?: string;
 }
 
 export interface WaitlistEntry {
@@ -222,4 +267,20 @@ export interface TestResult {
   expected: string;
   actual?: string;
   logs: string[];
+}
+
+export interface SetupWizardData {
+  businessName: string;
+  businessType: BusinessType;
+  shortName: string;
+  logoUrl?: string;
+  phone: string;
+  whatsapp: string;
+  address: string;
+  branchName: string;
+  totalSeats: number;
+  seatNamingStyle: SeatNamingStyle;
+  customPrefix?: string;
+  shifts: { name: string; startTime: string; endTime: string; defaultPrice: number }[];
+  plans: { name: string; durationDays: number; basePrice: number }[];
 }

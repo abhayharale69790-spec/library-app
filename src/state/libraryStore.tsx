@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
+  BusinessProfile,
   Organization,
   Branch,
   Shift,
@@ -15,8 +16,11 @@ import {
   WaitlistEntry,
   NotificationLog,
   Role,
+  SeatNamingStyle,
+  SetupWizardData,
 } from '../types';
 import {
+  INITIAL_BUSINESS_PROFILE,
   INITIAL_ORG,
   INITIAL_BRANCHES,
   INITIAL_SHIFTS,
@@ -63,6 +67,7 @@ export interface GateScanResult {
 
 interface LibraryContextType {
   // Master State
+  businessProfile: BusinessProfile;
   org: Organization;
   branches: Branch[];
   currentBranchId: string;
@@ -103,7 +108,12 @@ interface LibraryContextType {
   syncFromCloud: () => Promise<{ success: boolean; error?: string }>;
   refreshCloudStatus: () => Promise<boolean>;
 
-  // Actions
+  // Business & Setup Actions
+  updateBusinessProfile: (profile: Partial<BusinessProfile>) => void;
+  completeSetupWizard: (data: SetupWizardData) => void;
+  bulkGenerateSeats: (branchId: string, count: number, style: SeatNamingStyle, customPrefix?: string) => void;
+
+  // Core Actions
   addMember: (data: {
     fullName: string;
     phone: string;
@@ -160,6 +170,15 @@ interface LibraryContextType {
 
   addShift: (shift: Omit<Shift, 'id' | 'order'>) => void;
   updateShift: (shiftId: string, updates: Partial<Shift>) => void;
+  deleteShift: (shiftId: string) => void;
+
+  addBranch: (branchData: Omit<Branch, 'id' | 'orgId' | 'active'>) => Branch;
+  updateBranch: (branchId: string, branchData: Partial<Branch>) => void;
+  deleteBranch: (branchId: string) => void;
+
+  addMembershipPlan: (plan: Omit<MembershipPlan, 'id'>) => void;
+  updateMembershipPlan: (planId: string, plan: Partial<MembershipPlan>) => void;
+  deleteMembershipPlan: (planId: string) => void;
 
   transferBranch: (memberId: string, newBranchId: string) => { success: boolean; error?: string };
 
@@ -178,12 +197,20 @@ const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load from LocalStorage if available
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '_businessProfile');
+    return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE;
+  });
+
   const [org] = useState<Organization>(INITIAL_ORG);
   const [branches, setBranches] = useState<Branch[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '_branches');
     return saved ? JSON.parse(saved) : INITIAL_BRANCHES;
   });
-  const [currentBranchId, setCurrentBranchId] = useState<string>('br_1');
+  const [currentBranchId, setCurrentBranchId] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY + '_currentBranchId');
+    return saved || (INITIAL_BRANCHES[0]?.id || 'br_1');
+  });
 
   const [shifts, setShifts] = useState<Shift[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY + '_shifts');
@@ -248,17 +275,19 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Cloud Database Sync State
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
-  const [cloudSyncStatusText, setCloudSyncStatusText] = useState<string>('Local Storage Mode');
+  const [cloudSyncStatusText, setCloudSyncStatusText] = useState<string>('Local Storage Standalone');
 
   // App active role & simulation time
   const [activeRole, setActiveRole] = useState<Role>('ADMIN');
   const [simulatedClockTime, setSimulatedClockTime] = useState<string>(() => getCurrentTimeString());
-  const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('sh_1');
+  const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>(() => shifts[0]?.id || 'sh_1');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>(() => getTodayString());
 
   // Auto-sync state to LocalStorage
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEY + '_businessProfile', JSON.stringify(businessProfile));
     localStorage.setItem(STORAGE_KEY + '_branches', JSON.stringify(branches));
+    localStorage.setItem(STORAGE_KEY + '_currentBranchId', currentBranchId);
     localStorage.setItem(STORAGE_KEY + '_shifts', JSON.stringify(shifts));
     localStorage.setItem(STORAGE_KEY + '_plans', JSON.stringify(plans));
     localStorage.setItem(STORAGE_KEY + '_seats', JSON.stringify(seats));
@@ -271,10 +300,10 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(STORAGE_KEY + '_expenses', JSON.stringify(expenses));
     localStorage.setItem(STORAGE_KEY + '_waitlist', JSON.stringify(waitlist));
     localStorage.setItem(STORAGE_KEY + '_notifications', JSON.stringify(notifications));
-  }, [branches, shifts, plans, seats, members, memberships, assignments, payments, attendance, accessLogs, expenses, waitlist, notifications]);
+  }, [businessProfile, branches, currentBranchId, shifts, plans, seats, members, memberships, assignments, payments, attendance, accessLogs, expenses, waitlist, notifications]);
 
   // Current active branch object
-  const currentBranch = branches.find(b => b.id === currentBranchId) || branches[0];
+  const currentBranch = branches.find(b => b.id === currentBranchId) || branches[0] || INITIAL_BRANCHES[0];
 
   // Real-time occupancy calculation
   const insideAttendanceCount = attendance.filter(
@@ -306,93 +335,225 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     refreshCloudStatus();
   }, [refreshCloudStatus]);
 
-  // Setup Real-time listener if Supabase client is active
-  useEffect(() => {
-    const client = getSupabaseClient();
-    if (!client || !isCloudConnected) return;
-
+  const syncToCloud = async (): Promise<{ success: boolean; error?: string }> => {
+    setIsSyncingCloud(true);
+    setCloudSyncStatusText('Uploading local state to Cloud PostgreSQL...');
     try {
-      const channel = client
-        .channel('public:realtime_updates')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records' }, (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newRow = payload.new as Record<string, unknown>;
-            const newAtt: AttendanceRecord = {
-              id: String(newRow.id),
-              memberId: String(newRow.member_id),
-              branchId: String(newRow.branch_id),
-              shiftId: String(newRow.shift_id),
-              date: String(newRow.date),
-              checkInTime: String(newRow.check_in_time),
-              checkOutTime: newRow.check_out_time ? String(newRow.check_out_time) : undefined,
-              durationMinutes: newRow.duration_minutes ? Number(newRow.duration_minutes) : undefined,
-              method: newRow.method as AttendanceRecord['method'],
-              status: newRow.status as AttendanceRecord['status'],
-            };
-            setAttendance(prev => {
-              if (prev.some(a => a.id === newAtt.id)) return prev;
-              return [newAtt, ...prev];
-            });
-          }
-        })
-        .subscribe();
-
-      return () => {
-        client.removeChannel(channel);
+      const dataset: FullDataset = {
+        branches,
+        shifts,
+        plans,
+        seats,
+        members,
+        memberships,
+        assignments,
+        payments,
+        attendance,
+        accessLogs,
+        expenses,
       };
-    } catch (e) {
-      console.warn('Realtime channel error:', e);
+      const res = await pushDatasetToCloud(dataset);
+      setIsSyncingCloud(false);
+      if (res.success) {
+        setCloudSyncStatusText('✓ Cloud Database in Sync');
+        return { success: true };
+      } else {
+        setCloudSyncStatusText(`Sync Failed: ${res.error}`);
+        return { success: false, error: res.error };
+      }
+    } catch (e: any) {
+      setIsSyncingCloud(false);
+      setCloudSyncStatusText(`Sync Error: ${e.message}`);
+      return { success: false, error: e.message };
     }
-  }, [isCloudConnected]);
+  };
 
-  const syncToCloud = async () => {
+  const syncFromCloud = async (): Promise<{ success: boolean; error?: string }> => {
     setIsSyncingCloud(true);
-    const dataset: FullDataset = {
-      branches,
-      shifts,
-      plans,
-      seats,
-      members,
-      memberships,
-      assignments,
-      payments,
-      attendance,
-      accessLogs,
-      expenses,
+    setCloudSyncStatusText('Pulling latest dataset from Cloud PostgreSQL...');
+    try {
+      const res = await pullDatasetFromCloud();
+      setIsSyncingCloud(false);
+      if (res.success && res.data) {
+        const d = res.data;
+        if (d.branches) setBranches(d.branches);
+        if (d.shifts) setShifts(d.shifts);
+        if (d.plans) setPlans(d.plans);
+        if (d.seats) setSeats(d.seats);
+        if (d.members) setMembers(d.members);
+        if (d.memberships) setMemberships(d.memberships);
+        if (d.assignments) setAssignments(d.assignments);
+        if (d.payments) setPayments(d.payments);
+        if (d.attendance) setAttendance(d.attendance);
+        if (d.accessLogs) setAccessLogs(d.accessLogs);
+        if (d.expenses) setExpenses(d.expenses);
+
+        setCloudSyncStatusText('✓ Local state updated from Cloud');
+        return { success: true };
+      } else {
+        setCloudSyncStatusText(`Pull Failed: ${res.error}`);
+        return { success: false, error: res.error };
+      }
+    } catch (e: any) {
+      setIsSyncingCloud(false);
+      setCloudSyncStatusText(`Pull Error: ${e.message}`);
+      return { success: false, error: e.message };
+    }
+  };
+
+  // --- BUSINESS IDENTITY & SETUP WIZARD ---
+  const updateBusinessProfile = (profileUpdates: Partial<BusinessProfile>) => {
+    setBusinessProfile(prev => ({
+      ...prev,
+      ...profileUpdates,
+    }));
+  };
+
+  const bulkGenerateSeats = (branchId: string, count: number, style: SeatNamingStyle, customPrefix?: string) => {
+    const generated: Seat[] = [];
+    const prefix = style === 'CUSTOM' ? (customPrefix || 'D-') : style === 'ALPHA_NUMERIC' ? 'A-' : '';
+
+    for (let i = 1; i <= count; i++) {
+      const padNum = i < 10 ? `0${i}` : `${i}`;
+      let label = `${prefix}${padNum}`;
+      if (style === 'ALPHA_NUMERIC' && i > 30) {
+        const rowLetter = String.fromCharCode(65 + Math.floor((i - 1) / 30));
+        const seatInRow = ((i - 1) % 30) + 1;
+        const seatPad = seatInRow < 10 ? `0${seatInRow}` : `${seatInRow}`;
+        label = `${rowLetter}-${seatPad}`;
+      }
+
+      generated.push({
+        id: `seat_${branchId}_${i}`,
+        branchId,
+        label,
+        row: Math.floor((i - 1) / 6) + 1,
+        col: ((i - 1) % 6) + 1,
+        zone: 'Standard',
+        type: 'FIXED',
+        status: 'ACTIVE',
+        powerSocket: true,
+        hasLocker: i % 2 === 0,
+      });
+    }
+
+    setSeats(prev => {
+      const otherBranchSeats = prev.filter(s => s.branchId !== branchId);
+      return [...otherBranchSeats, ...generated];
+    });
+  };
+
+  const completeSetupWizard = (data: SetupWizardData) => {
+    const newProfile: BusinessProfile = {
+      ...businessProfile,
+      name: data.businessName,
+      type: data.businessType,
+      shortName: data.shortName || data.businessName.slice(0, 4).toUpperCase(),
+      logoUrl: data.logoUrl,
+      phone: data.phone,
+      whatsapp: data.whatsapp || data.phone,
+      address: data.address,
+      receiptPrefix: (data.shortName || 'RCP') + '-',
+      isConfigured: true,
     };
-    const res = await pushDatasetToCloud(dataset);
-    setIsSyncingCloud(false);
-    if (res.success) {
-      setIsCloudConnected(true);
-      setCloudSyncStatusText('Synced to Supabase');
+    setBusinessProfile(newProfile);
+
+    // Create/Update main branch
+    const branchId = 'br_1';
+    const newBranch: Branch = {
+      id: branchId,
+      orgId: 'org_1',
+      name: data.branchName || `${data.businessName} - Main Center`,
+      code: (data.shortName || 'BR') + '-01',
+      address: data.address,
+      phone: data.phone,
+      contactPerson: 'Manager',
+      capacity: data.totalSeats,
+      active: true,
+    };
+    setBranches([newBranch]);
+    setCurrentBranchId(branchId);
+
+    // Bulk generate seats
+    bulkGenerateSeats(branchId, data.totalSeats, data.seatNamingStyle, data.customPrefix);
+
+    // Create shifts
+    if (data.shifts && data.shifts.length > 0) {
+      const newShifts: Shift[] = data.shifts.map((s, idx) => ({
+        id: `sh_${idx + 1}`,
+        branchId: branchId,
+        name: s.name,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        defaultPrice: s.defaultPrice,
+        color: idx === 0 ? 'var(--shift-morning)' : idx === 1 ? 'var(--shift-evening)' : 'var(--shift-fullday)',
+        active: true,
+        order: idx + 1,
+      }));
+      setShifts(newShifts);
+      setSelectedShiftFilter(newShifts[0].id);
     }
-    return res;
+
+    // Create plans
+    if (data.plans && data.plans.length > 0) {
+      const newPlans: MembershipPlan[] = data.plans.map((p, idx) => ({
+        id: `plan_${idx + 1}`,
+        name: p.name,
+        durationDays: p.durationDays,
+        basePrice: p.basePrice,
+        description: `${p.name} access pass`,
+        features: ['High-speed Wi-Fi', 'Air Conditioning', 'Power Socket Desk', 'Digital Pass'],
+      }));
+      setPlans(newPlans);
+    }
   };
 
-  const syncFromCloud = async () => {
-    setIsSyncingCloud(true);
-    const res = await pullDatasetFromCloud();
-    setIsSyncingCloud(false);
-    if (res.success && res.data) {
-      if (res.data.branches) setBranches(res.data.branches);
-      if (res.data.shifts) setShifts(res.data.shifts);
-      if (res.data.seats) setSeats(res.data.seats);
-      if (res.data.members) setMembers(res.data.members);
-      if (res.data.memberships) setMemberships(res.data.memberships);
-      if (res.data.assignments) setAssignments(res.data.assignments);
-      if (res.data.payments) setPayments(res.data.payments);
-      if (res.data.attendance) setAttendance(res.data.attendance);
-      setIsCloudConnected(true);
-      setCloudSyncStatusText('Loaded from Supabase');
-    }
-    return { success: res.success, error: res.error };
+  // Branch Management
+  const addBranch = (branchData: Omit<Branch, 'id' | 'orgId' | 'active'>): Branch => {
+    const newId = `br_${Date.now().toString(36)}`;
+    const newBranch: Branch = {
+      ...branchData,
+      id: newId,
+      orgId: 'org_1',
+      active: true,
+    };
+    setBranches(prev => [...prev, newBranch]);
+    bulkGenerateSeats(newId, branchData.capacity || 50, 'ALPHA_NUMERIC');
+    return newBranch;
   };
 
-  // -------------------------------------------------------------
-  // CORE BUSINESS ENGINE ACTIONS
-  // -------------------------------------------------------------
+  const updateBranch = (branchId: string, branchData: Partial<Branch>) => {
+    setBranches(prev => prev.map(b => b.id === branchId ? { ...b, ...branchData } : b));
+  };
 
-  // 1. Add Member with Zero-Conflict Seat Assignment & Initial Payment
+  const deleteBranch = (branchId: string) => {
+    if (branches.length <= 1) return;
+    setBranches(prev => prev.filter(b => b.id !== branchId));
+    if (currentBranchId === branchId) {
+      const remaining = branches.filter(b => b.id !== branchId);
+      setCurrentBranchId(remaining[0]?.id || 'br_1');
+    }
+  };
+
+  // Plan Management
+  const addMembershipPlan = (planData: Omit<MembershipPlan, 'id'>) => {
+    const newId = `plan_${Date.now().toString(36)}`;
+    const newPlan: MembershipPlan = {
+      ...planData,
+      id: newId,
+    };
+    setPlans(prev => [...prev, newPlan]);
+  };
+
+  const updateMembershipPlan = (planId: string, updates: Partial<MembershipPlan>) => {
+    setPlans(prev => prev.map(p => p.id === planId ? { ...p, ...updates } : p));
+  };
+
+  const deleteMembershipPlan = (planId: string) => {
+    setPlans(prev => prev.filter(p => p.id !== planId));
+  };
+
+  // 1. Add Student (Member + Membership + Seat Assignment + Payment)
   const addMember = (data: {
     fullName: string;
     phone: string;
@@ -405,58 +566,37 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     amountPaid: number;
     paymentMethod: Payment['method'];
   }) => {
-    if (!data.fullName.trim()) return { success: false, error: 'Full name is required.' };
-    if (!data.phone.trim()) return { success: false, error: 'Phone number is required.' };
-    
-    // Duplicate Phone Check
-    const cleanPhone = data.phone.replace(/[^0-9]/g, '');
-    const phoneExists = members.some(m => m.phone.replace(/[^0-9]/g, '') === cleanPhone);
-    if (phoneExists) {
-      return { success: false, error: `A member with phone number ${data.phone} already exists.` };
+    const normalizedPhone = data.phone.replace(/[^0-9]/g, '').slice(-10);
+    const existing = members.find(m => m.phone.replace(/[^0-9]/g, '').slice(-10) === normalizedPhone);
+    if (existing) {
+      return { success: false, error: `Student with phone ${data.phone} already registered (${existing.fullName}, ${existing.memberCode}).` };
     }
 
-    const plan = plans.find(p => p.id === data.planId);
-    if (!plan) return { success: false, error: 'Selected membership plan not found.' };
-
-    const shift = shifts.find(s => s.id === data.shiftId);
-    if (!shift) return { success: false, error: 'Selected shift not found.' };
-
+    const selectedPlan = plans.find(p => p.id === data.planId) || plans[0];
     const today = getTodayString();
-    const startDate = today;
-    const endDate = addDays(today, plan.durationDays);
-    const memberId = 'mem_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-    const codeNum = 1000 + members.length + 1;
-    const memberCode = `24L-${currentBranch.code}-${codeNum}`;
-    const qrToken = generateMemberQRToken(memberCode, memberId, currentBranchId);
+    const endDate = addDays(today, selectedPlan.durationDays);
 
-    // If seat chosen, perform Conflict Check!
+    // Seat availability check if specified
     if (data.seatId) {
-      const seat = seats.find(s => s.id === data.seatId);
-      if (!seat) return { success: false, error: 'Selected seat does not exist.' };
-      if (seat.isBlocked || seat.status === 'BLOCKED') {
-        return { success: false, error: `Seat ${seat.label} is currently blocked: ${seat.blockReason || 'Maintenance'}` };
+      const targetSeat = seats.find(s => s.id === data.seatId);
+      if (targetSeat?.isBlocked) {
+        return { success: false, error: 'Selected seat is under maintenance.' };
       }
-
-      // Check overlapping assignment on SAME seat + SAME shift
-      const conflict = assignments.find(
-        a => a.seatId === data.seatId &&
-             a.shiftId === data.shiftId &&
+      const isOccupied = assignments.some(
+        a => a.seatId === data.seatId && 
+             a.shiftId === data.shiftId && 
              a.status === 'ACTIVE' &&
-             doDateRangesOverlap(a.startDate, a.endDate, startDate, endDate)
+             doDateRangesOverlap(today, endDate, a.startDate, a.endDate)
       );
-
-      if (conflict) {
-        const conflictingMember = members.find(m => m.id === conflict.memberId);
-        return {
-          success: false,
-          error: `CONFLICT: Seat ${seat.label} is already reserved for ${conflictingMember?.fullName || 'another member'} during this shift.`,
-        };
+      if (isOccupied) {
+        return { success: false, error: 'Selected seat is already occupied in this shift.' };
       }
     }
 
-    const totalFee = plan.basePrice;
-    const dueAmount = Math.max(0, totalFee - data.amountPaid);
-    const paymentStatus: Membership['paymentStatus'] = dueAmount === 0 ? 'PAID' : 'PARTIAL';
+    const prefix = businessProfile.shortName || 'MEM';
+    const memberId = 'mem_' + Date.now().toString(36);
+    const memberCode = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const qrToken = generateMemberQRToken(memberCode, memberId, currentBranchId);
 
     const newMember: Member = {
       id: memberId,
@@ -472,59 +612,64 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       qrToken,
     };
 
+    const totalFee = selectedPlan.basePrice;
+    const paid = Number(data.amountPaid);
+    const due = Math.max(0, totalFee - paid);
+    const paymentStatus = due === 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OVERDUE';
+
     const membershipId = 'msh_' + Date.now().toString(36);
     const newMembership: Membership = {
       id: membershipId,
       memberId,
-      planId: plan.id,
       branchId: currentBranchId,
-      shiftId: shift.id,
-      startDate,
+      planId: data.planId,
+      shiftId: data.shiftId,
+      startDate: today,
       endDate,
-      status: 'ACTIVE',
       totalFee,
-      paidAmount: data.amountPaid,
-      dueAmount,
+      paidAmount: paid,
+      dueAmount: due,
+      status: 'ACTIVE',
       paymentStatus,
-      autoRenew: false,
+      autoRenew: true,
+      assignedSeatId: data.seatId,
+      createdAt: today,
     };
 
-    let newAssignment: SeatAssignment | null = null;
+    const newAssignments: SeatAssignment[] = [];
     if (data.seatId) {
-      newAssignment = {
-        id: 'asgn_' + Date.now().toString(36),
-        memberId,
+      newAssignments.push({
+        id: 'asg_' + Date.now().toString(36),
         seatId: data.seatId,
-        shiftId: shift.id,
-        branchId: currentBranchId,
-        membershipId,
-        startDate,
+        memberId,
+        shiftId: data.shiftId,
+        startDate: today,
         endDate,
         status: 'ACTIVE',
         assignedAt: today,
-      };
+      });
     }
 
-    let newPayment: Payment | null = null;
-    if (data.amountPaid > 0) {
-      const receiptNo = `RCP-2026-${String(payments.length + 101).padStart(4, '0')}`;
-      newPayment = {
+    const newPayments: Payment[] = [];
+    if (paid > 0) {
+      newPayments.push({
         id: 'pay_' + Date.now().toString(36),
-        receiptNo,
+        receiptNo: `${businessProfile.receiptPrefix || 'RCP-'}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         memberId,
         membershipId,
-        amount: data.amountPaid,
-        paymentDate: `${today} ${getCurrentTimeString()}`,
+        amount: paid,
+        paymentDate: today,
         method: data.paymentMethod,
-        notes: 'Initial admission & seat booking fee.',
-      };
+        status: due === 0 ? 'PAID' : 'PARTIAL',
+        notes: `Admission fee for ${selectedPlan.name}`,
+        recordedBy: 'Reception Staff',
+      });
     }
 
-    // Atomic local update
     setMembers(prev => [newMember, ...prev]);
     setMemberships(prev => [newMembership, ...prev]);
-    if (newAssignment) setAssignments(prev => [newAssignment!, ...prev]);
-    if (newPayment) setPayments(prev => [newPayment!, ...prev]);
+    if (newAssignments.length > 0) setAssignments(prev => [...newAssignments, ...prev]);
+    if (newPayments.length > 0) setPayments(prev => [...newPayments, ...prev]);
 
     return { success: true, member: newMember };
   };
@@ -533,7 +678,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, ...data } : m));
   };
 
-  // 2. Assign Seat with Shift-Aware Overlap Validation
+  // 2. Assign Seat
   const assignSeat = (
     memberId: string,
     seatId: string,
@@ -543,80 +688,66 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   ) => {
     const seat = seats.find(s => s.id === seatId);
     if (!seat) return { success: false, error: 'Seat not found.' };
-    if (seat.isBlocked || seat.status === 'BLOCKED') {
-      return { success: false, error: `Seat ${seat.label} is blocked: ${seat.blockReason || 'Under maintenance'}` };
-    }
+    if (seat.isBlocked) return { success: false, error: `Seat ${seat.label} is currently blocked for maintenance.` };
 
-    const member = members.find(m => m.id === memberId);
-    if (!member) return { success: false, error: 'Member not found.' };
-
-    const activeMembership = memberships.find(m => m.memberId === memberId && m.status !== 'CANCELLED');
-    if (!activeMembership) return { success: false, error: 'Member has no valid membership.' };
-
-    // Strict Conflict Check: Same seat + Same shift + Overlapping Dates
     const conflict = assignments.find(
       a => a.seatId === seatId &&
            a.shiftId === shiftId &&
            a.status === 'ACTIVE' &&
-           a.memberId !== memberId &&
-           doDateRangesOverlap(a.startDate, a.endDate, startDate, endDate)
+           doDateRangesOverlap(startDate, endDate, a.startDate, a.endDate)
     );
 
     if (conflict) {
       const occupant = members.find(m => m.id === conflict.memberId);
       return {
         success: false,
-        error: `CONFLICT: Seat ${seat.label} is already assigned to ${occupant?.fullName || 'another student'} for this shift.`,
+        error: `Desk ${seat.label} is already reserved by ${occupant?.fullName || 'another student'} (${conflict.startDate} to ${conflict.endDate}).`
       };
     }
 
-    const updatedAssignments = assignments.map(a => {
-      if (a.memberId === memberId && a.status === 'ACTIVE') {
-        return { ...a, status: 'TRANSFERRED' as const };
-      }
-      return a;
-    });
+    setAssignments(prev => prev.map(a => 
+      a.memberId === memberId && a.shiftId === shiftId && a.status === 'ACTIVE' 
+        ? { ...a, status: 'TRANSFERRED' } 
+        : a
+    ));
 
     const newAssignment: SeatAssignment = {
-      id: 'asgn_' + Date.now().toString(36),
-      memberId,
+      id: 'asg_' + Date.now().toString(36),
       seatId,
+      memberId,
       shiftId,
-      branchId: currentBranchId,
-      membershipId: activeMembership.id,
       startDate,
       endDate,
       status: 'ACTIVE',
       assignedAt: getTodayString(),
     };
 
-    setAssignments([newAssignment, ...updatedAssignments]);
+    setAssignments(prev => [newAssignment, ...prev]);
+    setMemberships(prev => prev.map(m => m.memberId === memberId && m.status === 'ACTIVE' ? { ...m, assignedSeatId: seatId } : m));
+
     return { success: true };
   };
 
-  // 3. Seat Transfer
+  // 3. Transfer Seat
   const transferSeat = (memberId: string, targetSeatId: string, shiftId: string) => {
-    const member = members.find(m => m.id === memberId);
-    if (!member) return { success: false, error: 'Member not found.' };
-
-    const membership = memberships.find(m => m.memberId === memberId && m.status === 'ACTIVE');
-    if (!membership) return { success: false, error: 'No active membership found.' };
-
-    return assignSeat(memberId, targetSeatId, shiftId, membership.startDate, membership.endDate);
+    const today = getTodayString();
+    const activeMembership = memberships.find(m => m.memberId === memberId && m.status !== 'CANCELLED');
+    const endDate = activeMembership?.endDate || addDays(today, 30);
+    return assignSeat(memberId, targetSeatId, shiftId, today, endDate);
   };
 
   // 4. Block / Unblock Seat
   const blockSeat = (seatId: string, reason: string) => {
-    setSeats(prev => prev.map(s => s.id === seatId ? { ...s, isBlocked: true, status: 'BLOCKED', blockReason: reason } : s));
+    setSeats(prev => prev.map(s => s.id === seatId ? { ...s, isBlocked: true, blockReason: reason, status: 'MAINTENANCE' } : s));
     return { success: true };
   };
 
   const unblockSeat = (seatId: string) => {
-    setSeats(prev => prev.map(s => s.id === seatId ? { ...s, isBlocked: false, status: 'ACTIVE', blockReason: undefined } : s));
+    setSeats(prev => prev.map(s => s.id === seatId ? { ...s, isBlocked: false, blockReason: undefined, status: 'ACTIVE' } : s));
     return { success: true };
   };
 
-  // 5. Renewal Engine with Exact Expiry Rollover Arithmetic
+  // 5. Renew Membership
   const renewMembership = (
     memberId: string,
     planId: string,
@@ -625,76 +756,85 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     paymentMethod: Payment['method']
   ) => {
     const member = members.find(m => m.id === memberId);
-    if (!member) return { success: false, error: 'Member not found.' };
+    if (!member) return { success: false, error: 'Student not found.' };
 
-    const plan = plans.find(p => p.id === planId);
-    if (!plan) return { success: false, error: 'Plan not found.' };
+    const plan = plans.find(p => p.id === planId) || plans[0];
+    const currentMsh = memberships.find(m => m.memberId === memberId && m.status !== 'CANCELLED');
+    const today = getTodayString();
 
-    const currentMembership = memberships.find(m => m.memberId === memberId);
-    const currentEnd = currentMembership?.endDate || getTodayString();
-    
-    // Core Arithmetic: Active extends old end date; Expired restarts from today
-    const { startDate, endDate } = calculateRenewalDates(currentEnd, plan.durationDays);
+    const { startDate: newStartDate, endDate: newEndDate } = calculateRenewalDates(
+      currentMsh?.endDate || today,
+      plan.durationDays
+    );
 
     const totalFee = plan.basePrice;
-    const dueAmount = Math.max(0, totalFee - amountPaid);
-    const paymentStatus: Membership['paymentStatus'] = dueAmount === 0 ? 'PAID' : 'PARTIAL';
+    const paid = Number(amountPaid);
+    const due = Math.max(0, totalFee - paid);
+    const paymentStatus = due === 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'OVERDUE';
 
-    const membershipId = currentMembership?.id || ('msh_' + Date.now().toString(36));
-    const updatedMembership: Membership = {
-      id: membershipId,
+    const newMshId = 'msh_' + Date.now().toString(36);
+    const newMembership: Membership = {
+      id: newMshId,
       memberId,
-      planId: plan.id,
       branchId: currentBranchId,
+      planId,
       shiftId,
-      startDate,
-      endDate,
-      status: 'ACTIVE',
+      startDate: newStartDate,
+      endDate: newEndDate,
       totalFee,
-      paidAmount: (currentMembership?.paidAmount || 0) + amountPaid,
-      dueAmount,
+      paidAmount: paid,
+      dueAmount: due,
+      status: 'ACTIVE',
       paymentStatus,
-      autoRenew: false,
-      lastRenewedAt: getTodayString(),
+      autoRenew: true,
+      assignedSeatId: currentMsh?.assignedSeatId,
+      createdAt: today,
     };
 
-    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status: 'ACTIVE' } : m));
-    
-    setMemberships(prev => {
-      const exists = prev.some(m => m.id === membershipId);
-      if (exists) {
-        return prev.map(m => m.id === membershipId ? updatedMembership : m);
-      }
-      return [updatedMembership, ...prev];
-    });
+    if (currentMsh) {
+      setMemberships(prev => prev.map(m => m.id === currentMsh.id ? { ...m, status: 'EXPIRED' } : m));
+    }
+    setMemberships(prev => [newMembership, ...prev]);
 
-    if (amountPaid > 0) {
-      const receiptNo = `RCP-2026-${String(payments.length + 101).padStart(4, '0')}`;
-      const newPayment: Payment = {
-        id: 'pay_' + Date.now().toString(36),
-        receiptNo,
-        memberId,
-        membershipId,
-        amount: amountPaid,
-        paymentDate: `${getTodayString()} ${getCurrentTimeString()}`,
-        method: paymentMethod,
-        notes: `Renewal for ${plan.name} (${plan.durationDays} days)`,
-      };
-      setPayments(prev => [newPayment, ...prev]);
+    if (currentMsh?.assignedSeatId) {
+      const activeAsg = assignments.find(a => a.memberId === memberId && a.seatId === currentMsh.assignedSeatId && a.status === 'ACTIVE');
+      if (activeAsg) {
+        setAssignments(prev => prev.map(a => a.id === activeAsg.id ? { ...a, endDate: newEndDate } : a));
+      } else {
+        setAssignments(prev => [{
+          id: 'asg_' + Date.now().toString(36),
+          seatId: currentMsh.assignedSeatId!,
+          memberId,
+          shiftId,
+          startDate: newStartDate,
+          endDate: newEndDate,
+          status: 'ACTIVE',
+          assignedAt: today,
+        }, ...prev]);
+      }
     }
 
-    setAssignments(prev => prev.map(a => {
-      if (a.memberId === memberId && a.status === 'ACTIVE') {
-        return { ...a, endDate, shiftId };
-      }
-      return a;
-    }));
+    if (paid > 0) {
+      const receipt: Payment = {
+        id: 'pay_' + Date.now().toString(36),
+        receiptNo: `${businessProfile.receiptPrefix || 'RCP-'}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        memberId,
+        membershipId: newMshId,
+        amount: paid,
+        paymentDate: today,
+        method: paymentMethod,
+        status: due === 0 ? 'PAID' : 'PARTIAL',
+        notes: `Subscription Renewal for ${plan.name}`,
+        recordedBy: 'Reception Desk',
+      };
+      setPayments(prev => [receipt, ...prev]);
+    }
 
-    audioSynth.playPaymentSuccess();
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status: 'ACTIVE' } : m));
     return { success: true };
   };
 
-  // 6. Record Fee Payment / Clear Outstanding Dues
+  // 6. Record Payment
   const recordPayment = (
     memberId: string,
     amount: number,
@@ -702,271 +842,199 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     reference?: string,
     notes?: string
   ) => {
-    if (amount <= 0) return { success: false, error: 'Payment amount must be greater than 0.' };
+    if (amount <= 0) return { success: false, error: 'Payment amount must be positive.' };
 
-    const member = members.find(m => m.id === memberId);
-    if (!member) return { success: false, error: 'Member not found.' };
+    const activeMsh = memberships.find(m => m.memberId === memberId && m.status !== 'CANCELLED');
+    if (!activeMsh) return { success: false, error: 'Active membership not found.' };
 
-    const membership = memberships.find(m => m.memberId === memberId && m.status !== 'CANCELLED');
-    if (!membership) return { success: false, error: 'No membership found for member.' };
+    const today = getTodayString();
+    const newPaid = activeMsh.paidAmount + amount;
+    const newDue = Math.max(0, activeMsh.totalFee - newPaid);
+    const paymentStatus = newDue === 0 ? 'PAID' : 'PARTIAL';
 
-    const receiptNo = `RCP-2026-${String(payments.length + 101).padStart(4, '0')}`;
-    const newPayment: Payment = {
+    const receipt: Payment = {
       id: 'pay_' + Date.now().toString(36),
-      receiptNo,
+      receiptNo: `${businessProfile.receiptPrefix || 'RCP-'}${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       memberId,
-      membershipId: membership.id,
+      membershipId: activeMsh.id,
       amount,
-      paymentDate: `${getTodayString()} ${getCurrentTimeString()}`,
+      paymentDate: today,
       method,
+      status: paymentStatus,
       referenceTxnId: reference,
-      notes: notes || 'Fee installment / clearance',
+      notes: notes || 'Fee installment receipt',
+      recordedBy: 'Reception Desk',
     };
 
-    const newPaid = membership.paidAmount + amount;
-    const newDue = Math.max(0, membership.totalFee - newPaid);
-    const newStatus: Membership['paymentStatus'] = newDue === 0 ? 'PAID' : 'PARTIAL';
+    setPayments(prev => [receipt, ...prev]);
+    setMemberships(prev => prev.map(m => m.id === activeMsh.id ? { ...m, paidAmount: newPaid, dueAmount: newDue, paymentStatus } : m));
 
-    setMemberships(prev => prev.map(m => m.id === membership.id ? {
-      ...m,
-      paidAmount: newPaid,
-      dueAmount: newDue,
-      paymentStatus: newStatus,
-    } : m));
-
-    setPayments(prev => [newPayment, ...prev]);
-    audioSynth.playPaymentSuccess();
-
-    return { success: true, receipt: newPayment };
+    return { success: true, receipt };
   };
 
-  // 7. QR Gate Hardware Access State Machine
-  const scanGateQR = (qrPayload: string, gateId = 'GATE-01 (Turnstile Alpha)'): GateScanResult => {
+  // 7. QR Gate Scanner
+  const scanGateQR = (qrPayload: string, gateId: string = 'GATE-01'): GateScanResult => {
+    const parseRes = parseQRToken(qrPayload);
+    const now = simulatedClockTime || getCurrentTimeString();
     const today = getTodayString();
-    const nowTime = simulatedClockTime || getCurrentTimeString();
-    const timestamp = getCurrentTimestampString();
 
-    const parsed = parseQRToken(qrPayload);
-    let member: Member | undefined;
-
-    if (parsed.isValid && parsed.memberId) {
-      member = members.find(m => m.id === parsed.memberId || m.memberCode === parsed.memberCode);
-    } else {
-      member = members.find(m => m.memberCode === qrPayload.trim() || m.id === qrPayload.trim());
+    if (!parseRes.isValid || !parseRes.memberId) {
+      audioSynth.playAccessDenied();
+      const log: AccessLog = {
+        id: 'acc_' + Date.now().toString(36),
+        timestamp: getCurrentTimestampString(),
+        branchId: currentBranchId,
+        gateId,
+        action: 'DENIED',
+        result: 'DENIED',
+        reason: 'Invalid QR code signature',
+      };
+      setAccessLogs(prev => [log, ...prev]);
+      return { allowed: false, action: 'DENIED', reason: log.reason };
     }
 
+    const member = members.find(m => m.id === parseRes.memberId);
     if (!member) {
       audioSynth.playAccessDenied();
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        branchId: currentBranchId,
-        timestamp,
-        result: 'DENIED',
-        reason: 'INVALID_QR: Token signature or Member ID not recognized.',
-        gateId,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-      return { allowed: false, action: 'DENIED', reason: 'Invalid or Unrecognized QR Code.' };
+      return { allowed: false, action: 'DENIED', reason: 'Student not found in registry.' };
     }
 
-    // Branch Verification
     if (member.branchId !== currentBranchId) {
-      const homeBranch = branches.find(b => b.id === member.branchId)?.name || 'Other Branch';
       audioSynth.playAccessDenied();
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        memberId: member.id,
-        memberCode: member.memberCode,
-        memberName: member.fullName,
-        branchId: currentBranchId,
-        timestamp,
-        result: 'DENIED',
-        reason: `WRONG_BRANCH: Member belongs to ${homeBranch}`,
-        gateId,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-      return { allowed: false, action: 'DENIED', reason: `Access Denied: Registered at ${homeBranch}.`, member };
+      return { allowed: false, action: 'DENIED', reason: 'Pass belongs to a different center.' };
     }
 
-    // Membership & Expiry Verification
     const membership = memberships.find(m => m.memberId === member.id && m.status !== 'CANCELLED');
     if (!membership) {
       audioSynth.playAccessDenied();
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        memberId: member.id,
-        memberCode: member.memberCode,
-        memberName: member.fullName,
-        branchId: currentBranchId,
-        timestamp,
-        result: 'DENIED',
-        reason: 'NO_MEMBERSHIP: No membership record found.',
-        gateId,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-      return { allowed: false, action: 'DENIED', reason: 'Access Denied: No active membership.', member };
+      return { allowed: false, action: 'DENIED', reason: 'No active subscription found.' };
     }
 
-    const daysLeft = getDaysRemaining(membership.endDate);
-    if (daysLeft < 0 || membership.status === 'EXPIRED' || member.status === 'EXPIRED') {
+    if (getDaysRemaining(membership.endDate) < 0) {
       audioSynth.playAccessDenied();
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        memberId: member.id,
-        memberCode: member.memberCode,
-        memberName: member.fullName,
-        branchId: currentBranchId,
-        timestamp,
-        result: 'DENIED',
-        reason: `MEMBERSHIP_EXPIRED: Expired on ${membership.endDate} (${Math.abs(daysLeft)} days ago)`,
-        gateId,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-      return { allowed: false, action: 'DENIED', reason: `Access Denied: Membership expired on ${membership.endDate}.`, member, membership };
+      return { allowed: false, action: 'DENIED', reason: `Membership expired on ${membership.endDate}. Please renew.` };
     }
 
-    // Shift & Timing Verification
-    const memberShift = shifts.find(s => s.id === membership.shiftId);
+    const shift = shifts.find(s => s.id === membership.shiftId);
+    if (shift) {
+      const allowedInShift = isTimeInShift(now, shift.startTime, shift.endTime, businessProfile.gracePeriodMinutes || 15);
+      if (!allowedInShift) {
+        audioSynth.playAccessDenied();
+        return {
+          allowed: false,
+          action: 'DENIED',
+          member,
+          membership,
+          shift,
+          reason: `Shift mismatch: Allowed timing is ${shift.startTime} - ${shift.endTime}. (Current: ${now})`,
+        };
+      }
+    }
+
+    const activeSession = attendance.find(a => a.memberId === member.id && a.status === 'INSIDE' && a.date === today);
     const assignment = assignments.find(a => a.memberId === member.id && a.status === 'ACTIVE');
-    const seat = seats.find(s => s.id === assignment?.seatId);
+    const seat = assignment ? seats.find(s => s.id === assignment.seatId) : undefined;
 
-    const isFullDay = memberShift?.startTime === '00:00' && memberShift?.endTime === '23:59';
-    const shiftValidNow = isFullDay || (memberShift && isTimeInShift(nowTime, memberShift.startTime, memberShift.endTime, 15));
-
-    if (!shiftValidNow && memberShift) {
-      audioSynth.playAccessDenied();
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        memberId: member.id,
-        memberCode: member.memberCode,
-        memberName: member.fullName,
-        branchId: currentBranchId,
-        timestamp,
-        result: 'DENIED',
-        reason: `WRONG_SHIFT: Allowed shift is ${memberShift.name} (${memberShift.startTime} - ${memberShift.endTime}). Current time: ${nowTime}`,
-        gateId,
-        shiftId: memberShift.id,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-      return {
-        allowed: false,
-        action: 'DENIED',
-        reason: `Access Denied: Allowed shift is ${memberShift.name} (${memberShift.startTime} to ${memberShift.endTime}). Current time: ${nowTime}`,
-        member,
-        membership,
-        shift: memberShift,
-        seat,
-      };
-    }
-
-    // Anti-Passback / Check-In vs Check-Out State Machine
-    const openSession = attendance.find(
-      a => a.memberId === member.id && a.branchId === currentBranchId && a.status === 'INSIDE' && a.date === today
-    );
-
-    if (openSession) {
-      // Check-Out
-      const checkInParts = openSession.checkInTime.split(':').map(n => parseInt(n, 10));
-      const nowParts = nowTime.split(':').map(n => parseInt(n, 10));
-      const inMinutes = checkInParts[0] * 60 + checkInParts[1];
-      const outMinutes = nowParts[0] * 60 + nowParts[1];
-      const durationMinutes = Math.max(1, outMinutes - inMinutes);
-
-      setAttendance(prev => prev.map(a => a.id === openSession.id ? {
-        ...a,
-        checkOutTime: nowTime + ':00',
-        durationMinutes,
-        status: 'COMPLETED' as const,
-      } : a));
-
-      audioSynth.playCheckout();
-
-      const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
-        memberId: member.id,
-        memberCode: member.memberCode,
-        memberName: member.fullName,
-        branchId: currentBranchId,
-        timestamp,
-        result: 'ALLOWED',
-        reason: `CHECK_OUT: Successfully checked out. Study session: ${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m.`,
-        gateId,
-        shiftId: memberShift?.id,
-      };
-      setAccessLogs(prev => [log, ...prev]);
-
-      return {
-        allowed: true,
-        action: 'CHECK_OUT',
-        reason: `Check-out successful. Study session: ${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m.`,
-        member,
-        membership,
-        shift: memberShift,
-        seat,
-        durationMinutes,
-      };
-    } else {
-      // Check-In
+    if (!activeSession) {
+      // CHECK-IN
+      audioSynth.playAccessGranted();
       const newAttendance: AttendanceRecord = {
         id: 'att_' + Date.now().toString(36),
         memberId: member.id,
         branchId: currentBranchId,
-        shiftId: membership.shiftId,
         date: today,
-        checkInTime: nowTime + ':00',
-        method: 'QR_SCAN',
+        checkInTime: now,
+        gateId,
+        seatLabel: seat?.label,
         status: 'INSIDE',
       };
-
       setAttendance(prev => [newAttendance, ...prev]);
-      audioSynth.playAccessGranted();
 
       const log: AccessLog = {
-        id: 'log_' + Date.now().toString(36),
+        id: 'acc_' + Date.now().toString(36),
+        timestamp: getCurrentTimestampString(),
         memberId: member.id,
-        memberCode: member.memberCode,
         memberName: member.fullName,
+        memberCode: member.memberCode,
         branchId: currentBranchId,
-        timestamp,
-        result: 'ALLOWED',
-        reason: `CHECK_IN: Validated ${memberShift?.name}. Seat ${seat?.label || 'Floating'}. Gate Open.`,
         gateId,
-        shiftId: memberShift?.id,
+        action: 'ENTRY',
+        result: 'ALLOWED',
+        reason: `Access Granted • Assigned Desk: ${seat?.label || 'Floating'}`,
       };
       setAccessLogs(prev => [log, ...prev]);
 
       return {
         allowed: true,
         action: 'CHECK_IN',
-        reason: `Welcome ${member.fullName}! Seat: ${seat?.label || 'Floating'}. Gate Opened.`,
+        reason: `Welcome ${member.fullName}! Entry recorded.`,
         member,
         membership,
-        shift: memberShift,
+        shift,
         seat,
+      };
+    } else {
+      // CHECK-OUT
+      audioSynth.playAccessGranted();
+      const [inH, inM] = activeSession.checkInTime.split(':').map(Number);
+      const [outH, outM] = now.split(':').map(Number);
+      let duration = (outH * 60 + outM) - (inH * 60 + inM);
+      if (duration < 0) duration += 24 * 60;
+
+      setAttendance(prev => prev.map(a => a.id === activeSession.id ? {
+        ...a,
+        checkOutTime: now,
+        durationMinutes: duration,
+        status: 'COMPLETED',
+      } : a));
+
+      const log: AccessLog = {
+        id: 'acc_' + Date.now().toString(36),
+        timestamp: getCurrentTimestampString(),
+        memberId: member.id,
+        memberName: member.fullName,
+        memberCode: member.memberCode,
+        branchId: currentBranchId,
+        gateId,
+        action: 'EXIT',
+        result: 'ALLOWED',
+        reason: `Exit Recorded (${Math.floor(duration/60)}h ${duration%60}m studied)`,
+      };
+      setAccessLogs(prev => [log, ...prev]);
+
+      return {
+        allowed: true,
+        action: 'CHECK_OUT',
+        reason: `Good work ${member.fullName}! Session: ${Math.floor(duration / 60)}h ${duration % 60}m.`,
+        member,
+        membership,
+        shift,
+        seat,
+        durationMinutes: duration,
       };
     }
   };
 
   const manualCheckInOut = (memberId: string): GateScanResult => {
     const member = members.find(m => m.id === memberId);
-    if (!member) return { allowed: false, action: 'DENIED' as const, reason: 'Member not found' };
-    return scanGateQR(member.qrToken, 'DESK-MANUAL-OVERRIDE');
+    if (!member) return { allowed: false, action: 'DENIED', reason: 'Student not found.' };
+    return scanGateQR(member.qrToken, 'MANUAL-DESK');
   };
 
-  // 8. Operational Expenses
-  const addExpense = (expense: Omit<Expense, 'id'>) => {
-    const newExp: Expense = {
-      ...expense,
+  // 8. Expense Management
+  const addExpense = (expenseData: Omit<Expense, 'id'>) => {
+    const newExpense: Expense = {
+      ...expenseData,
       id: 'exp_' + Date.now().toString(36),
     };
-    setExpenses(prev => [newExp, ...prev]);
+    setExpenses(prev => [newExpense, ...prev]);
   };
 
   const deleteExpense = (expenseId: string) => {
     setExpenses(prev => prev.filter(e => e.id !== expenseId));
   };
 
-  // 9. Shift Config
+  // 9. Shift Management
   const addShift = (shiftData: Omit<Shift, 'id' | 'order'>) => {
     const newShift: Shift = {
       ...shiftData,
@@ -980,9 +1048,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, ...updates } : s));
   };
 
+  const deleteShift = (shiftId: string) => {
+    setShifts(prev => prev.filter(s => s.id !== shiftId));
+  };
+
   // 10. Branch Transfer
   const transferBranch = (memberId: string, newBranchId: string) => {
-    if (newBranchId === currentBranchId) return { success: false, error: 'Target branch is same as current.' };
+    if (newBranchId === currentBranchId) return { success: false, error: 'Target center is same as current.' };
     
     setAssignments(prev => prev.map(a => a.memberId === memberId && a.status === 'ACTIVE' ? { ...a, status: 'TRANSFERRED' } : a));
     
@@ -1010,6 +1082,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const plan = plans.find(p => p.id === membership?.planId);
 
     const message = generateWhatsAppMessage(type, {
+      businessName: businessProfile.name,
+      supportPhone: businessProfile.phone,
       recipientName: member?.fullName || 'Student',
       phone: member?.phone || '',
       branchName: currentBranch.name,
@@ -1026,7 +1100,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const log: NotificationLog = {
       id: 'notif_' + Date.now().toString(36),
       memberId: memberId,
-      memberName: member?.fullName || 'Member',
+      memberName: member?.fullName || 'Student',
       phone: member?.phone || '',
       type,
       channel: 'WHATSAPP',
@@ -1039,10 +1113,11 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { url, log };
   };
 
-  // 12. Backup, Restore & Reset
+  // Reset to Demo Data
   const resetToDemoData = () => {
-    localStorage.clear();
+    setBusinessProfile(INITIAL_BUSINESS_PROFILE);
     setBranches(INITIAL_BRANCHES);
+    setCurrentBranchId('br_1');
     setShifts(INITIAL_SHIFTS);
     setPlans(INITIAL_PLANS);
     setSeats(INITIAL_SEATS);
@@ -1059,8 +1134,9 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const exportDataJSON = () => {
     const dump = {
-      version: '1.0',
+      version: '2.0',
       exportedAt: new Date().toISOString(),
+      businessProfile,
       org,
       branches,
       shifts,
@@ -1083,6 +1159,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const data = JSON.parse(jsonStr);
       if (data.members && data.seats && data.shifts) {
+        if (data.businessProfile) setBusinessProfile(data.businessProfile);
         setBranches(data.branches || INITIAL_BRANCHES);
         setShifts(data.shifts || INITIAL_SHIFTS);
         setPlans(data.plans || INITIAL_PLANS);
@@ -1105,6 +1182,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <LibraryContext.Provider
       value={{
+        businessProfile,
         org,
         branches,
         currentBranchId,
@@ -1138,6 +1216,9 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         syncToCloud,
         syncFromCloud,
         refreshCloudStatus,
+        updateBusinessProfile,
+        completeSetupWizard,
+        bulkGenerateSeats,
         addMember,
         updateMember,
         assignSeat,
@@ -1152,6 +1233,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteExpense,
         addShift,
         updateShift,
+        deleteShift,
+        addBranch,
+        updateBranch,
+        deleteBranch,
+        addMembershipPlan,
+        updateMembershipPlan,
+        deleteMembershipPlan,
         transferBranch,
         sendWhatsAppNotification,
         resetToDemoData,

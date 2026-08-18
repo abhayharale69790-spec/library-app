@@ -145,12 +145,26 @@ html, body {
   display: flex !important;
 }
 
+.mobile-only-block {
+  display: block;
+}
+
+.desktop-only-block {
+  display: none !important;
+}
+
 @media (min-width: 1024px) {
   .desktop-sidebar {
     display: flex !important;
   }
   .mobile-bottom-nav {
     display: none !important;
+  }
+  .mobile-only-block {
+    display: none !important;
+  }
+  .desktop-only-block {
+    display: flex !important;
   }
 }
 

@@ -13,10 +13,13 @@ import {
   Cloud,
   CloudOff,
   Bell,
-  ChevronDown
+  ChevronDown,
+  Sparkles,
+  Settings
 } from 'lucide-react';
 import { Role } from '../../types';
 import { NotificationCenterModal } from './NotificationCenterModal';
+import { SetupWizardModal } from '../settings/SetupWizardModal';
 
 interface HeaderProps {
   onOpenAddMember: () => void;
@@ -25,6 +28,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) => {
   const {
+    businessProfile,
     currentBranch,
     branches,
     setCurrentBranchId,
@@ -42,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) =
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [showClockMenu, setShowClockMenu] = useState(false);
 
   const toggleTheme = () => {
@@ -75,210 +80,186 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddMember, onNavigate }) =
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 16px',
-          gap: '12px',
+          padding: '0 14px',
+          gap: '10px',
           zIndex: 50,
           flexShrink: 0,
         }}
       >
-        {/* Left: Mobile Title / Branch Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--brand-primary)', letterSpacing: '-0.03em' }}>
-              24<span style={{ color: 'var(--text-primary)' }}>Library</span>
+        {/* Left: Configurable Business Title / Branch Dropdown */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+            onClick={() => onNavigate('dashboard')}
+          >
+            <div 
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'linear-gradient(135deg, var(--brand-primary), #1d4ed8)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '800',
+                fontSize: '13px',
+                flexShrink: 0
+              }}
+            >
+              {businessProfile.shortName ? businessProfile.shortName.charAt(0) : '24'}
+            </div>
+            <span 
+              style={{ 
+                fontSize: '15px', 
+                fontWeight: '800', 
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.02em',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {businessProfile.name || 'Study Point'}
             </span>
           </div>
 
-          <div style={{ position: 'relative' }}>
+          {/* Simple Branch Selector */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
             <select
               value={currentBranch.id}
               onChange={(e) => setCurrentBranchId(e.target.value)}
               style={{
-                padding: '4px 24px 4px 8px',
-                fontSize: '12px',
+                padding: '4px 20px 4px 6px',
+                fontSize: '11px',
                 fontWeight: 600,
                 background: 'var(--bg-surface-elevated)',
-                borderColor: 'var(--border-subtle)',
+                border: '1px solid var(--border-medium)',
                 borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)',
-                cursor: 'pointer',
-                maxWidth: '130px',
-                textOverflow: 'ellipsis',
+                color: 'var(--brand-primary)',
                 appearance: 'none',
+                cursor: 'pointer',
+                maxWidth: '120px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
               }}
             >
               {branches.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
+                <option key={b.id} value={b.id}>{b.name.split(' - ')[0]}</option>
               ))}
             </select>
-            <ChevronDown size={12} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+            <ChevronDown size={11} style={{ position: 'absolute', right: '5px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
           </div>
         </div>
 
-        {/* Right: Role Switcher, Clock Trigger, Notifications, Add */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Persona Switcher Pill */}
-          <select
-            value={activeRole}
-            onChange={(e) => setActiveRole(e.target.value as Role)}
-            style={{
-              padding: '4px 8px',
-              fontSize: '11px',
-              fontWeight: 700,
-              background: activeRole === 'STAFF' 
-                ? 'rgba(59, 130, 246, 0.15)' 
-                : activeRole === 'STUDENT' 
-                  ? 'rgba(236, 72, 153, 0.15)' 
-                  : 'rgba(16, 185, 129, 0.15)',
-              color: activeRole === 'STAFF' 
-                ? '#3b82f6' 
-                : activeRole === 'STUDENT' 
-                  ? '#ec4899' 
-                  : '#10b981',
-              borderColor: 'transparent',
-              borderRadius: 'var(--radius-full)',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-            }}
-          >
-            <option value="STAFF">Staff</option>
-            <option value="STUDENT">Student</option>
-            <option value="ADMIN">Admin</option>
-          </select>
+        {/* Right: Quick Setup / Role Switcher / Alerts */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {/* Quick Setup Wizard Trigger */}
+          {!businessProfile.isConfigured && (
+            <button
+              onClick={() => setShowSetupWizard(true)}
+              className="btn-primary"
+              style={{
+                minHeight: '28px',
+                padding: '0 8px',
+                fontSize: '11px',
+                fontWeight: '700',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                boxShadow: '0 0 10px rgba(16, 185, 129, 0.4)',
+                gap: '4px'
+              }}
+            >
+              <Sparkles size={12} /> Setup
+            </button>
+          )}
 
-          {/* Time Clock Badge (Click to adjust) */}
-          <button
-            onClick={() => setShowClockMenu(!showClockMenu)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 600
-            }}
-            title="Simulated Library Clock"
-          >
-            <Clock size={13} color="var(--brand-primary)" />
-            <span>{simulatedClockTime}</span>
-          </button>
+          {/* Persona Role Switcher */}
+          <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-sm)', padding: '2px', border: '1px solid var(--border-subtle)' }}>
+            {(['ADMIN', 'STAFF', 'STUDENT'] as Role[]).map(r => (
+              <button
+                key={r}
+                onClick={() => {
+                  setActiveRole(r);
+                  if (r === 'STUDENT') onNavigate('studentportal');
+                  else onNavigate('dashboard');
+                }}
+                style={{
+                  padding: '3px 7px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-xs)',
+                  border: 'none',
+                  background: activeRole === r ? 'var(--brand-primary)' : 'transparent',
+                  color: activeRole === r ? '#ffffff' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {r === 'ADMIN' ? 'Owner' : r === 'STAFF' ? 'Staff' : 'Student'}
+              </button>
+            ))}
+          </div>
 
-          {/* Notifications Bell */}
+          {/* Notification Bell */}
           <button
             onClick={() => setShowNotifications(true)}
+            className="btn-ghost"
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-secondary)',
-              position: 'relative'
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              position: 'relative',
+              color: 'var(--text-secondary)'
             }}
             aria-label="Notifications"
           >
-            <Bell size={17} />
+            <Bell size={16} />
             {notifications.length > 0 && (
               <span 
                 style={{
                   position: 'absolute',
-                  top: '-3px',
-                  right: '-3px',
-                  width: '15px',
-                  height: '15px',
+                  top: '4px',
+                  right: '4px',
+                  width: '7px',
+                  height: '7px',
                   borderRadius: '50%',
                   background: 'var(--status-danger)',
-                  color: '#fff',
-                  fontSize: '9px',
-                  fontWeight: '800',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid var(--bg-card)'
-                }}
-              >
-                {notifications.length}
-              </span>
+                  boxShadow: '0 0 4px var(--status-danger)'
+                }} 
+              />
             )}
           </button>
 
-          {/* Desktop Add Member Button */}
+          {/* Quick Setup Settings Icon */}
           <button
-            onClick={onOpenAddMember}
-            className="btn-primary"
-            style={{
-              display: 'none',
-              padding: '0 14px',
-              minHeight: '36px',
-              fontSize: '13px'
-            }}
+            onClick={() => setShowSetupWizard(true)}
+            className="btn-ghost"
+            style={{ width: '32px', height: '32px', padding: 0, color: 'var(--text-secondary)' }}
+            title="Setup & Business Profile"
+            aria-label="Settings"
           >
-            <Plus size={15} /> Add
+            <Settings size={15} />
           </button>
         </div>
       </header>
 
-      {/* Clock Simulator Quick Picker Dropdown */}
-      {showClockMenu && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: 'calc(var(--header-height-mobile) + 8px)',
-            right: '16px',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-medium)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px',
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 1000,
-            width: '260px'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700' }}>Simulate Clock</span>
-            <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>{simulatedClockTime}</span>
-          </div>
-          <input
-            type="time"
-            value={simulatedClockTime}
-            onChange={(e) => setSimulatedClockTime(e.target.value)}
-            className="form-input"
-            style={{ minHeight: '36px', marginBottom: '8px', fontSize: '13px' }}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-            {['08:30', '13:00', '17:30', '21:00', '02:00', '06:00'].map(t => (
-              <button
-                key={t}
-                onClick={() => {
-                  setSimulatedClockTime(t);
-                  setShowClockMenu(false);
-                }}
-                className="btn-secondary"
-                style={{ minHeight: '28px', padding: '0 4px', fontSize: '11px', justifyContent: 'center' }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Notification Center Modal */}
+      {showNotifications && (
+        <NotificationCenterModal isOpen={true} onClose={() => setShowNotifications(false)} />
       )}
 
-      {/* Notifications Slide-Up */}
-      <NotificationCenterModal
-        isOpen={showNotifications}
-        onClose={() => setShowNotifications(false)}
-      />
+      {/* Setup Wizard Modal */}
+      {showSetupWizard && (
+        <SetupWizardModal onClose={() => setShowSetupWizard(false)} />
+      )}
     </>
   );
 };

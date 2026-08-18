@@ -14,10 +14,14 @@ import {
   Settings, 
   TestTube, 
   Sparkles,
-  UserCheck
+  Building2,
+  Receipt,
+  Download,
+  FileText
 } from 'lucide-react';
 import { useLibrary } from '../../state/libraryStore';
 import { BottomSheet } from '../common/BottomSheet';
+import { SetupWizardModal } from '../settings/SetupWizardModal';
 
 interface BottomNavProps {
   currentView: string;
@@ -30,31 +34,32 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onNavigate,
   onOpenAddMember
 }) => {
-  const { activeRole, setActiveRole } = useLibrary();
+  const { activeRole, businessProfile } = useLibrary();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
-  // Staff Navigation Tabs
+  // 1. Staff Navigation Tabs
   const staffTabs = [
     { id: 'dashboard', label: 'Home', icon: Home },
     { id: 'gate', label: 'Scan', icon: QrCode, isPrimary: true },
     { id: 'seatmap', label: 'Seats', icon: Grid },
-    { id: 'members', label: 'Members', icon: Users },
+    { id: 'members', label: 'Students', icon: Users },
   ];
 
-  // Student Navigation Tabs
+  // 2. Student Navigation Tabs
   const studentTabs = [
     { id: 'studentportal', label: 'Home', icon: Home },
     { id: 'gate', label: 'Pass', icon: QrCode, isPrimary: true },
-    { id: 'seatmap', label: 'My Seat', icon: Armchair },
+    { id: 'seatmap', label: 'Seat', icon: Armchair },
     { id: 'payments', label: 'Payments', icon: CreditCard },
   ];
 
-  // Admin / Owner Navigation Tabs
+  // 3. Admin / Owner Navigation Tabs
   const adminTabs = [
-    { id: 'dashboard', label: 'Home', icon: Home },
-    { id: 'members', label: 'Members', icon: Users },
-    { id: 'gate', label: 'Gate', icon: QrCode, isPrimary: true },
-    { id: 'payments', label: 'Finance', icon: DollarSign },
+    { id: 'dashboard', label: 'Home', icon: Home, isPrimary: false },
+    { id: 'members', label: 'Students', icon: Users, isPrimary: false },
+    { id: 'payments', label: 'Finance', icon: DollarSign, isPrimary: false },
+    { id: 'analytics', label: 'Reports', icon: BarChart3, isPrimary: false },
   ];
 
   const currentTabs = activeRole === 'STUDENT' 
@@ -93,19 +98,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 key={tab.id}
                 onClick={() => onNavigate(tab.id)}
                 style={{
-                  width: '52px',
-                  height: '52px',
+                  width: '50px',
+                  height: '50px',
                   borderRadius: '50%',
                   backgroundColor: 'var(--brand-primary)',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginTop: '-18px',
-                  boxShadow: '0 4px 14px var(--brand-glow)',
-                  border: '3px solid var(--bg-app)',
-                  transition: 'all var(--transition-fast)'
+                  border: '3px solid var(--bg-card)',
+                  transform: 'translateY(-14px)',
+                  boxShadow: '0 6px 18px rgba(59, 130, 246, 0.45)',
+                  cursor: 'pointer',
                 }}
+                className="bottom-nav-primary-btn"
                 aria-label={tab.label}
               >
                 <Icon size={24} />
@@ -119,18 +125,21 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               onClick={() => onNavigate(tab.id)}
               style={{
                 flex: 1,
-                height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '4px',
+                height: '100%',
+                background: 'transparent',
+                border: 'none',
                 color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
-                transition: 'all var(--transition-fast)'
+                gap: '3px',
+                cursor: 'pointer',
+                transition: 'color var(--transition-fast)'
               }}
             >
-              <Icon size={20} strokeWidth={isActive ? 2.5 : 1.75} />
-              <span style={{ fontSize: '11px', fontWeight: isActive ? '700' : '500' }}>
+              <Icon size={20} />
+              <span style={{ fontSize: '10.5px', fontWeight: isActive ? 700 : 500 }}>
                 {tab.label}
               </span>
             </button>
@@ -142,172 +151,146 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           onClick={() => setShowMoreMenu(true)}
           style={{
             flex: 1,
-            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '4px',
-            color: showMoreMenu ? 'var(--brand-primary)' : 'var(--text-muted)',
-            transition: 'all var(--transition-fast)'
+            height: '100%',
+            background: 'transparent',
+            border: 'none',
+            color: ['expenses', 'shifts', 'analytics', 'tests', 'settings'].includes(currentView) 
+              ? 'var(--brand-primary)' 
+              : 'var(--text-muted)',
+            gap: '3px',
+            cursor: 'pointer',
           }}
         >
           <MoreHorizontal size={20} />
-          <span style={{ fontSize: '11px', fontWeight: '500' }}>More</span>
+          <span style={{ fontSize: '10.5px', fontWeight: 500 }}>
+            More
+          </span>
         </button>
       </nav>
 
-      {/* More Navigation Menu Bottom Sheet */}
-      <BottomSheet
-        isOpen={showMoreMenu}
-        onClose={() => setShowMoreMenu(false)}
-        title="Quick Navigation & Tools"
-        subtitle={`Role: ${activeRole}`}
-      >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', paddingBottom: '16px' }}>
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('seatmap');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
-              <Grid size={20} />
-            </div>
-            <span>Seat Matrix</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('shifts');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
-              <Clock size={20} />
-            </div>
-            <span>Shifts</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('payments');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-              <CreditCard size={20} />
-            </div>
-            <span>Payments</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('expenses');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
-              <DollarSign size={20} />
-            </div>
-            <span>Expenses</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('studentportal');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(236, 72, 153, 0.15)', color: '#ec4899' }}>
-              <UserCheck size={20} />
-            </div>
-            <span>Student App</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('analytics');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4' }}>
-              <BarChart3 size={20} />
-            </div>
-            <span>Analytics</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('tests');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' }}>
-              <TestTube size={20} />
-            </div>
-            <span>Tests (42)</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => {
-              onNavigate('settings');
-              setShowMoreMenu(false);
-            }}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(100, 116, 139, 0.2)', color: '#94a3b8' }}>
-              <Settings size={20} />
-            </div>
-            <span>Settings</span>
-          </button>
-
-          {onOpenAddMember && (
+      {/* Slide-Up "More" Action Sheet */}
+      {showMoreMenu && (
+        <BottomSheet
+          isOpen={true}
+          onClose={() => setShowMoreMenu(false)}
+          title="More Operations & Settings"
+          subtitle={businessProfile.name || 'Management Utilities'}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', paddingBottom: '10px' }}>
+            {/* Quick Setup Wizard Button */}
             <button
-              className="quick-action-card"
-              style={{ border: '1px dashed var(--brand-primary)' }}
               onClick={() => {
                 setShowMoreMenu(false);
-                onOpenAddMember();
+                setShowSetupWizard(true);
+              }}
+              className="quick-action-card"
+              style={{
+                margin: 0,
+                border: '1.5px solid var(--status-success)',
+                background: 'rgba(16, 185, 129, 0.08)',
+                minHeight: '80px',
+                gridColumn: 'span 2',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
               }}
             >
-              <div className="quick-action-icon" style={{ background: 'var(--brand-primary)', color: '#fff' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--status-success)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Sparkles size={20} />
               </div>
-              <span style={{ color: 'var(--brand-primary)' }}>+ Add Member</span>
+              <div style={{ textAlign: 'left' }}>
+                <strong style={{ fontSize: '14px', color: 'var(--status-success)' }}>
+                  10-Minute Setup Wizard
+                </strong>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Configure business name, branch, seats, shifts & plans
+                </p>
+              </div>
             </button>
-          )}
-        </div>
 
-        {/* Role Switcher in More Menu */}
-        <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-          <p style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>
-            Switch Persona
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-            {(['STAFF', 'STUDENT', 'ADMIN'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => {
-                  setActiveRole(r);
-                  setShowMoreMenu(false);
-                }}
-                className={`pill-item ${activeRole === r ? 'active' : ''}`}
-                style={{ justifyContent: 'center' }}
-              >
-                {r}
-              </button>
-            ))}
+            <button
+              onClick={() => {
+                onNavigate('seatmap');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <Grid size={22} color="var(--brand-primary)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>Seat Inventory</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onNavigate('shifts');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <Clock size={22} color="var(--shift-morning)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>Shifts & Timings</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onNavigate('expenses');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <Receipt size={22} color="var(--status-danger)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>Operating Expenses</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onNavigate('analytics');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <BarChart3 size={22} color="var(--status-success)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>P&L & Analytics</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onNavigate('tests');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <TestTube size={22} color="var(--status-warning)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>42-Scenario Tests</span>
+            </button>
+
+            <button
+              onClick={() => {
+                onNavigate('settings');
+                setShowMoreMenu(false);
+              }}
+              className="quick-action-card"
+              style={{ margin: 0 }}
+            >
+              <Settings size={22} color="var(--text-secondary)" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>Center Settings</span>
+            </button>
           </div>
-        </div>
-      </BottomSheet>
+        </BottomSheet>
+      )}
+
+      {/* Setup Wizard Modal from More Menu */}
+      {showSetupWizard && (
+        <SetupWizardModal onClose={() => setShowSetupWizard(false)} />
+      )}
     </>
   );
 };

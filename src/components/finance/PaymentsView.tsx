@@ -14,17 +14,24 @@ import {
   Share2,
   Printer,
   ChevronRight,
-  User
+  User,
+  Building2,
+  Phone,
+  MessageSquare,
+  Download
 } from 'lucide-react';
 import { formatDateDisplay } from '../../utils/dateMath';
 import { BottomSheet } from '../common/BottomSheet';
+import { buildWhatsAppLink } from '../../utils/whatsappHelper';
 
 export const PaymentsView: React.FC = () => {
   const {
+    businessProfile,
     currentBranch,
     payments,
     members,
     memberships,
+    plans,
     recordPayment,
   } = useLibrary();
 
@@ -34,10 +41,10 @@ export const PaymentsView: React.FC = () => {
   // Record Payment Modal State
   const [showCollectModal, setShowCollectModal] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState('');
-  const [amount, setAmount] = useState<number>(1600);
-  const [method, setMethod] = useState<PaymentMethod>('UPI_GPAY');
+  const [amount, setAmount] = useState<number>(1500);
+  const [method, setMethod] = useState<PaymentMethod>('UPI');
   const [refTxn, setRefTxn] = useState('');
-  const [notes, setNotes] = useState('Membership fee collection');
+  const [notes, setNotes] = useState('Membership fee installment');
   const [statusNotice, setStatusNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Completed Receipt Modal State
@@ -69,13 +76,7 @@ export const PaymentsView: React.FC = () => {
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMemberId) {
-      setStatusNotice({ type: 'error', text: 'Please select a scholar.' });
-      return;
-    }
-
-    const msh = memberships.find(m => m.memberId === selectedMemberId && m.status !== 'CANCELLED');
-    if (!msh) {
-      setStatusNotice({ type: 'error', text: 'Active membership not found for scholar.' });
+      setStatusNotice({ type: 'error', text: 'Please select a student.' });
       return;
     }
 
@@ -91,14 +92,26 @@ export const PaymentsView: React.FC = () => {
     }
   };
 
+  const handleShareReceiptWhatsApp = (p: Payment) => {
+    const student = members.find(m => m.id === p.memberId);
+    const msh = memberships.find(m => m.id === p.membershipId);
+    const plan = plans.find(x => x.id === msh?.planId);
+    const brand = businessProfile.name || currentBranch.name;
+
+    const msg = `🧾 *${brand} — Official Payment Receipt*\n\nDear *${student?.fullName || 'Student'}*,\nWe have successfully received your payment of *₹${p.amount.toLocaleString('en-IN')}*.\n\n*Receipt No:* ${p.receiptNo}\n*Date:* ${p.paymentDate}\n*Payment Mode:* ${p.method}\n*Plan:* ${plan?.name || 'Study Pass'}\n*Validity:* ${msh?.startDate || ''} to ${msh?.endDate || ''}\n*Balance Due:* ₹${msh?.dueAmount || 0}\n\n*${brand}*\n📞 ${businessProfile.phone}\n📍 ${businessProfile.address}`;
+
+    const url = buildWhatsAppLink(student?.phone || '', msg);
+    window.open(url, '_blank');
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1100px', margin: '0 auto' }}>
       {/* 1. Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Fee Collections & Dues</h1>
+          <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Fee Collections & Receipts</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            {currentBranch.name} • {payments.length} verified receipts recorded
+            {businessProfile.name || currentBranch.name} • {payments.length} verified receipts recorded
           </p>
         </div>
 
@@ -114,11 +127,11 @@ export const PaymentsView: React.FC = () => {
       {/* 2. KPI Summary Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
         <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Collected</span>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Collected Revenue</span>
           <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--status-success)', marginTop: '4px' }}>
             ₹{totalRevenue.toLocaleString('en-IN')}
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>All time receipts</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>All-time receipts</span>
         </div>
 
         <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
@@ -126,7 +139,7 @@ export const PaymentsView: React.FC = () => {
           <div style={{ fontSize: '20px', fontWeight: '800', color: totalDues > 0 ? 'var(--status-danger)' : 'var(--status-success)', marginTop: '4px' }}>
             ₹{totalDues.toLocaleString('en-IN')}
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{overdueMembers.length} scholars due</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{overdueMembers.length} students pending</span>
         </div>
 
         <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
@@ -138,7 +151,7 @@ export const PaymentsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Big Action Button for Mobile */}
+      {/* 3. Big Touch Action Button for Mobile */}
       <button
         onClick={() => setShowCollectModal(true)}
         className="btn-primary"
@@ -160,7 +173,7 @@ export const PaymentsView: React.FC = () => {
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
-            placeholder="Search student, receipt number (e.g. RCP-2026-0081)..."
+            placeholder="Search student, receipt number (e.g. HDSP-00152)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="form-input"
@@ -172,9 +185,10 @@ export const PaymentsView: React.FC = () => {
         <div className="pill-selector">
           {[
             { id: 'ALL', label: 'All Modes' },
-            { id: 'UPI_GPAY', label: 'Google Pay / UPI' },
+            { id: 'UPI', label: 'UPI / QR' },
             { id: 'CASH', label: 'Cash' },
-            { id: 'CARD', label: 'Card POS' },
+            { id: 'CARD', label: 'Card' },
+            { id: 'BANK_TRANSFER', label: 'Bank Transfer' },
           ].map(f => (
             <button
               key={f.id}
@@ -215,7 +229,7 @@ export const PaymentsView: React.FC = () => {
                     </span>
                   </div>
                   <h4 style={{ fontSize: '14px', fontWeight: '700', marginTop: '3px' }}>
-                    {member?.fullName || 'Scholar'}
+                    {member?.fullName || 'Student'}
                   </h4>
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     {p.paymentDate}
@@ -243,7 +257,7 @@ export const PaymentsView: React.FC = () => {
             <thead>
               <tr>
                 <th>Receipt #</th>
-                <th>Scholar</th>
+                <th>Student</th>
                 <th>Payment Date</th>
                 <th>Method</th>
                 <th>Amount</th>
@@ -256,7 +270,7 @@ export const PaymentsView: React.FC = () => {
                 return (
                   <tr key={p.id}>
                     <td><span className="mono" style={{ color: 'var(--brand-primary)', fontWeight: '700' }}>{p.receiptNo}</span></td>
-                    <td><strong>{member?.fullName || 'Scholar'}</strong></td>
+                    <td><strong>{member?.fullName || 'Student'}</strong></td>
                     <td>{p.paymentDate}</td>
                     <td><span className="badge badge-neutral">{p.method}</span></td>
                     <td><strong style={{ color: 'var(--status-success)' }}>₹{p.amount}</strong></td>
@@ -279,11 +293,11 @@ export const PaymentsView: React.FC = () => {
           isOpen={true}
           onClose={() => setShowCollectModal(false)}
           title="Collect Student Payment"
-          subtitle="Generate instant official digital fee receipt"
+          subtitle={`Issuing official receipt for ${businessProfile.name || currentBranch.name}`}
         >
           <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="form-group">
-              <label className="form-label">Select Scholar *</label>
+              <label className="form-label">Select Student *</label>
               <select
                 value={selectedMemberId}
                 onChange={(e) => {
@@ -338,17 +352,17 @@ export const PaymentsView: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Payment Mode *</label>
+              <label className="form-label">Payment Method *</label>
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value as PaymentMethod)}
                 className="form-select"
               >
-                <option value="UPI_GPAY">Google Pay / PhonePe UPI</option>
-                <option value="UPI_PAYTM">Paytm UPI</option>
+                <option value="UPI">UPI / Google Pay / PhonePe</option>
                 <option value="CASH">Cash Reception</option>
-                <option value="CARD">Card POS</option>
-                <option value="NETBANKING">Direct Bank Transfer</option>
+                <option value="CARD">Debit / Credit Card</option>
+                <option value="BANK_TRANSFER">Direct Bank Transfer / NEFT</option>
+                <option value="OTHER">Other</option>
               </select>
             </div>
 
@@ -356,7 +370,7 @@ export const PaymentsView: React.FC = () => {
               <label className="form-label">Reference / UPI Txn ID (Optional)</label>
               <input
                 type="text"
-                placeholder="UPI / Bank Ref Number"
+                placeholder="UPI / Txn Reference"
                 value={refTxn}
                 onChange={(e) => setRefTxn(e.target.value)}
                 className="form-input"
@@ -375,7 +389,7 @@ export const PaymentsView: React.FC = () => {
         </BottomSheet>
       )}
 
-      {/* 8. Digital Payment Receipt Bottom Sheet */}
+      {/* 8. Branded Digital Receipt Bottom Sheet */}
       {activeReceipt && (
         <BottomSheet
           isOpen={true}
@@ -384,62 +398,78 @@ export const PaymentsView: React.FC = () => {
           subtitle={activeReceipt.receiptNo}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Branded Receipt Box */}
             <div 
               style={{
                 padding: '20px 16px',
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), var(--bg-card))',
+                background: 'linear-gradient(180deg, var(--bg-surface-elevated), var(--bg-card))',
                 border: '1.5px solid var(--status-success)',
                 borderRadius: 'var(--radius-lg)',
-                textAlign: 'center'
+                textAlign: 'center',
+                boxShadow: '0 4px 20px rgba(16, 185, 129, 0.15)'
               }}
             >
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--status-success)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto' }}>
-                <CheckCircle2 size={28} />
+              {/* Header Business Name & Info */}
+              <h2 style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                {businessProfile.name || currentBranch.name}
+              </h2>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {businessProfile.address || currentBranch.address} • Tel: {businessProfile.phone || currentBranch.phone}
+              </p>
+
+              <div style={{ margin: '14px 0', padding: '10px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: 'var(--radius-md)' }}>
+                <span className="mono" style={{ fontSize: '12px', fontWeight: '700', color: 'var(--brand-primary)' }}>
+                  RECEIPT #{activeReceipt.receiptNo}
+                </span>
+                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--status-success)', marginTop: '2px' }}>
+                  ₹{activeReceipt.amount.toLocaleString('en-IN')}
+                </div>
+                <span className="badge badge-success" style={{ fontSize: '10px' }}>
+                  ✓ PAID • {activeReceipt.method}
+                </span>
               </div>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--status-success)' }}>
-                ✓ PAYMENT SUCCESSFUL
-              </h3>
-              <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--text-primary)', margin: '8px 0' }}>
-                ₹{activeReceipt.amount.toLocaleString('en-IN')}
+
+              {/* Receipt Line Items */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', textAlign: 'left', borderTop: '1px dashed var(--border-medium)', paddingTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Student Name:</span>
+                  <strong>{members.find(m => m.id === activeReceipt.memberId)?.fullName || 'Student'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Payment Date:</span>
+                  <strong>{activeReceipt.paymentDate}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Payment Method:</span>
+                  <strong>{activeReceipt.method}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Center / Branch:</span>
+                  <strong>{currentBranch.name.split(' - ')[0]}</strong>
+                </div>
               </div>
-              <span className="mono" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                Receipt: {activeReceipt.receiptNo}
-              </span>
             </div>
 
-            <div className="mobile-card" style={{ margin: 0, padding: '14px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Scholar:</span>
-                <strong>{members.find(m => m.id === activeReceipt.memberId)?.fullName || 'Scholar'}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Date & Time:</span>
-                <strong>{activeReceipt.paymentDate}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Payment Mode:</span>
-                <span className="badge badge-info">{activeReceipt.method}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Branch:</span>
-                <strong>{currentBranch.name}</strong>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+            {/* Action Buttons: Share WhatsApp & Print */}
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => {
-                  window.print();
-                }}
+                onClick={() => handleShareReceiptWhatsApp(activeReceipt)}
                 className="btn-secondary"
-                style={{ flex: 1, minHeight: '44px' }}
+                style={{ flex: 1, minHeight: '44px', color: '#25D366', fontSize: '13px' }}
               >
-                <Printer size={16} /> Print Receipt
+                <MessageSquare size={16} /> Share WhatsApp
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="btn-secondary"
+                style={{ flex: 1, minHeight: '44px', fontSize: '13px' }}
+              >
+                <Printer size={16} /> Print / Save
               </button>
               <button
                 onClick={() => setActiveReceipt(null)}
                 className="btn-primary"
-                style={{ flex: 1, minHeight: '44px' }}
+                style={{ flex: 1, minHeight: '44px', fontSize: '13px' }}
               >
                 Done
               </button>

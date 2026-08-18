@@ -71,7 +71,7 @@ export const ShiftManager: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
         {shifts.map(shift => {
           const shiftAssignments = assignments.filter(
-            a => a.branchId === currentBranch.id && a.shiftId === shift.id && a.status === 'ACTIVE'
+            a => branchSeats.some(s => s.id === a.seatId) && a.shiftId === shift.id && a.status === 'ACTIVE'
           );
           const occupancyRate = branchSeats.length > 0 
             ? Math.round((shiftAssignments.length / branchSeats.length) * 100) 

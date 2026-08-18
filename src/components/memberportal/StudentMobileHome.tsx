@@ -30,6 +30,7 @@ export const StudentMobileHome: React.FC<StudentMobileHomeProps> = ({
   onOpenSeatDetails,
 }) => {
   const {
+    businessProfile,
     members,
     memberships,
     assignments,
@@ -81,7 +82,7 @@ export const StudentMobileHome: React.FC<StudentMobileHomeProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--seat-my-seat)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Student Scholar Pass
+              {businessProfile.name || 'Student Scholar Pass'}
             </span>
             <h2 style={{ fontSize: '20px', fontWeight: '800', marginTop: '2px', color: 'var(--text-primary)' }}>
               Good day, {currentStudent.fullName.split(' ')[0]} 📚

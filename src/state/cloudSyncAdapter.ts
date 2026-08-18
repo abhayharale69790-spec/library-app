@@ -131,8 +131,6 @@ export async function pushDatasetToCloud(dataset: FullDataset): Promise<{ succes
       member_id: a.memberId,
       seat_id: a.seatId,
       shift_id: a.shiftId,
-      branch_id: a.branchId,
-      membership_id: a.membershipId,
       start_date: a.startDate,
       end_date: a.endDate,
       status: a.status,
@@ -149,6 +147,8 @@ export async function pushDatasetToCloud(dataset: FullDataset): Promise<{ succes
       amount: p.amount,
       payment_date: p.paymentDate,
       method: p.method,
+      status: p.status,
+      recorded_by: p.recordedBy,
       reference_txn_id: p.referenceTxnId || null,
       notes: p.notes || null,
     }));
@@ -159,12 +159,11 @@ export async function pushDatasetToCloud(dataset: FullDataset): Promise<{ succes
       id: a.id,
       member_id: a.memberId,
       branch_id: a.branchId,
-      shift_id: a.shiftId,
       date: a.date,
       check_in_time: a.checkInTime,
       check_out_time: a.checkOutTime || null,
       duration_minutes: a.durationMinutes || null,
-      method: a.method,
+      gate_id: a.gateId,
       status: a.status,
     }));
     await client.from('attendance_records').upsert(attendancePayload);
@@ -309,8 +308,6 @@ export async function pullDatasetFromCloud(): Promise<{ success: boolean; data?:
         memberId: String(a.member_id),
         seatId: String(a.seat_id),
         shiftId: String(a.shift_id),
-        branchId: String(a.branch_id),
-        membershipId: String(a.membership_id),
         startDate: String(a.start_date),
         endDate: String(a.end_date),
         status: a.status as SeatAssignment['status'],
@@ -327,6 +324,8 @@ export async function pullDatasetFromCloud(): Promise<{ success: boolean; data?:
         amount: Number(p.amount),
         paymentDate: String(p.payment_date),
         method: p.method as Payment['method'],
+        status: (p.status as Payment['status']) || 'PAID',
+        recordedBy: String(p.recorded_by || 'Reception Desk'),
         referenceTxnId: p.reference_txn_id ? String(p.reference_txn_id) : undefined,
         notes: p.notes ? String(p.notes) : undefined,
       }));
@@ -337,12 +336,11 @@ export async function pullDatasetFromCloud(): Promise<{ success: boolean; data?:
         id: String(a.id),
         memberId: String(a.member_id),
         branchId: String(a.branch_id),
-        shiftId: String(a.shift_id),
+        gateId: String(a.gate_id || 'GATE-01'),
         date: String(a.date),
         checkInTime: String(a.check_in_time),
         checkOutTime: a.check_out_time ? String(a.check_out_time) : undefined,
         durationMinutes: a.duration_minutes ? Number(a.duration_minutes) : undefined,
-        method: a.method as AttendanceRecord['method'],
         status: a.status as AttendanceRecord['status'],
       }));
     }

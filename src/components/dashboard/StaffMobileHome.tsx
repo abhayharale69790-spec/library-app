@@ -13,7 +13,10 @@ import {
   Clock, 
   Sparkles,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  CreditCard,
+  Building2,
+  Grid
 } from 'lucide-react';
 import { getDaysRemaining } from '../../utils/dateMath';
 
@@ -29,6 +32,7 @@ export const StaffMobileHome: React.FC<StaffMobileHomeProps> = ({
   onOpenMemberDetail,
 }) => {
   const {
+    businessProfile,
     currentBranch,
     shifts,
     seats,
@@ -67,6 +71,10 @@ export const StaffMobileHome: React.FC<StaffMobileHomeProps> = ({
     .filter(p => p.paymentDate.startsWith('2026-08') || p.paymentDate.startsWith(new Date().toISOString().slice(0, 7)))
     .reduce((sum, p) => sum + p.amount, 0);
 
+  const totalDueAmount = memberships
+    .filter(m => m.branchId === currentBranch.id)
+    .reduce((sum, m) => sum + m.dueAmount, 0);
+
   // Alerts
   const expiringMemberships = memberships.filter(m => {
     if (m.status !== 'ACTIVE' && m.status !== 'EXPIRING') return false;
@@ -75,11 +83,10 @@ export const StaffMobileHome: React.FC<StaffMobileHomeProps> = ({
   });
 
   const pendingPayments = memberships.filter(m => m.dueAmount > 0);
-  const unassignedMembers = members.filter(m => m.branchId === currentBranch.id && m.status === 'ACTIVE').slice(0, 2);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px', margin: '0 auto' }}>
-      {/* 1. Header Greeting & Current Shift */}
+      {/* 1. Header Greeting & Business Name */}
       <div 
         style={{
           background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(15, 23, 42, 0.6))',
@@ -92,253 +99,270 @@ export const StaffMobileHome: React.FC<StaffMobileHomeProps> = ({
         }}
       >
         <div>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--brand-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Staff On Duty • {currentBranch.name}
+          <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--brand-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {businessProfile.name || 'Study Center'} • {currentBranch.name.split(' - ')[0]}
           </span>
           <h2 style={{ fontSize: '18px', fontWeight: '800', marginTop: '2px', color: 'var(--text-primary)' }}>
-            Good day, Reception Kiosk 👋
+            Good day, Reception Desk 👋
           </h2>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <span className="badge badge-info" style={{ fontSize: '11px', padding: '4px 10px' }}>
-            <Clock size={12} /> {currentActiveShift ? currentActiveShift.name.split(' ')[0] : 'General'} Shift
-          </span>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-            {simulatedClockTime} (Live)
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            Active Shift: <strong style={{ color: 'var(--brand-primary)' }}>{currentActiveShift?.name.split(' ')[0] || 'Regular Shift'}</strong>
           </p>
         </div>
-      </div>
 
-      {/* 2. Live Status KPI Grid (4 Cards) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-        <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Inside Now</span>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-success)', boxShadow: '0 0 6px var(--status-success)' }} />
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)' }}>
+            {simulatedClockTime}
           </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)' }}>
-            {occupiedCount}
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontWeight: '600' }}>
-            Active in Hall
+          <span className="badge badge-success" style={{ fontSize: '10px' }}>
+            ● Gate Active
           </span>
         </div>
+      </div>
 
-        <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Available</span>
-            <Armchair size={15} color="var(--brand-primary)" />
+      {/* 2. Today's 4 Operations Snapshot Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+        <div className="mobile-card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid var(--brand-primary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Students Inside</span>
+            <Users size={16} color="var(--brand-primary)" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)' }}>
+          <div style={{ fontSize: '24px', fontWeight: '900', color: 'var(--text-primary)', marginTop: '4px' }}>
+            {insideAttendanceCount}
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Currently studying</span>
+        </div>
+
+        <div className="mobile-card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid var(--status-success)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Available Desks</span>
+            <Armchair size={16} color="var(--status-success)" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: '900', color: 'var(--status-success)', marginTop: '4px' }}>
             {availableSeats}
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            of {totalSeats} Desks
-          </span>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Out of {totalSeats} desks</span>
         </div>
 
-        <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Occupancy</span>
-            <TrendingUp size={15} color="var(--status-warning)" />
+        <div className="mobile-card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid var(--status-success)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Today Collection</span>
+            <DollarSign size={16} color="var(--status-success)" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--text-primary)' }}>
-            {Math.round((occupiedCount / totalSeats) * 100)}%
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {occupiedCount} / {totalSeats} filled
-          </span>
-        </div>
-
-        <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Collections</span>
-            <DollarSign size={15} color="var(--status-success)" />
-          </div>
-          <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-primary)' }}>
+          <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--status-success)', marginTop: '4px' }}>
             ₹{todayCollections.toLocaleString('en-IN')}
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontWeight: '600' }}>
-            Settled Dues
-          </span>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Verified receipts</span>
+        </div>
+
+        <div className="mobile-card" style={{ margin: 0, padding: '14px', borderLeft: '4px solid var(--status-danger)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Due Amount</span>
+            <CreditCard size={16} color="var(--status-danger)" />
+          </div>
+          <div style={{ fontSize: '22px', fontWeight: '900', color: totalDueAmount > 0 ? 'var(--status-danger)' : 'var(--status-success)', marginTop: '4px' }}>
+            ₹{totalDueAmount.toLocaleString('en-IN')}
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{pendingPayments.length} scholars pending</span>
         </div>
       </div>
 
-      {/* 3. Big Mobile Quick Actions (Grid of 5 Large Buttons) */}
+      {/* 3. Four Core Action Buttons */}
       <div>
-        <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
-          Quick Actions
+        <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
+          What Action Should I Take?
         </h3>
-        
-        {/* Main Big Action: Scan QR */}
-        <button
-          onClick={() => onNavigate('gate')}
-          className="btn-primary"
-          style={{
-            minHeight: '56px',
-            fontSize: '16px',
-            fontWeight: '700',
-            borderRadius: 'var(--radius-lg)',
-            marginBottom: '10px',
-            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-            boxShadow: '0 6px 20px rgba(37, 99, 235, 0.4)',
-          }}
-        >
-          <QrCode size={22} /> SCAN STUDENT QR PASS
-        </button>
 
-        {/* 4 Secondary Quick Actions Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
           <button
-            className="quick-action-card"
             onClick={() => onNavigate('gate')}
+            className="quick-action-card"
+            style={{
+              margin: 0,
+              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.2), var(--bg-card))',
+              border: '1.5px solid var(--brand-primary)',
+              minHeight: '74px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}
           >
-            <div className="quick-action-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-              <LogIn size={20} />
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'var(--brand-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <QrCode size={22} />
             </div>
-            <span>Manual Check-In</span>
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>SCAN QR</span>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Optical turnstile gate</p>
+            </div>
           </button>
 
           <button
-            className="quick-action-card"
-            onClick={() => onNavigate('gate')}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
-              <LogOut size={20} />
-            </div>
-            <span>Manual Check-Out</span>
-          </button>
-
-          <button
-            className="quick-action-card"
-            onClick={() => onNavigate('seatmap')}
-          >
-            <div className="quick-action-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
-              <Armchair size={20} />
-            </div>
-            <span>Assign / Free Seat</span>
-          </button>
-
-          <button
-            className="quick-action-card"
             onClick={onOpenAddMember}
-            style={{ border: '1px dashed var(--brand-primary)' }}
+            className="quick-action-card"
+            style={{
+              margin: 0,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), var(--bg-card))',
+              border: '1.5px solid var(--status-success)',
+              minHeight: '74px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}
           >
-            <div className="quick-action-icon" style={{ background: 'var(--brand-primary)', color: '#ffffff' }}>
-              <UserPlus size={20} />
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'var(--status-success)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <UserPlus size={22} />
             </div>
-            <span style={{ color: 'var(--brand-primary)' }}>+ Add New Member</span>
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>ADD STUDENT</span>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>4-step quick wizard</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('payments')}
+            className="quick-action-card"
+            style={{
+              margin: 0,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-medium)',
+              minHeight: '74px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}
+          >
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'var(--bg-surface-elevated)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <DollarSign size={22} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>COLLECT FEE</span>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Issue digital receipt</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('seatmap')}
+            className="quick-action-card"
+            style={{
+              margin: 0,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-medium)',
+              minHeight: '74px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}
+          >
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'var(--bg-surface-elevated)', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Grid size={22} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-primary)' }}>VIEW SEATS</span>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Shift desk matrix</p>
+            </div>
           </button>
         </div>
       </div>
 
-      {/* 4. Today's Urgent Alerts */}
-      <div className="mobile-card" style={{ margin: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <AlertTriangle size={16} color="var(--status-warning)" /> Today's Alerts
-          </h3>
-          <span className="badge badge-warning">{expiringMemberships.length + pendingPayments.length} Action Items</span>
-        </div>
+      {/* 4. Actionable Alerts (What does this student need?) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Today's Urgent Tasks ({expiringMemberships.length + pendingPayments.length})
+        </h3>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {expiringMemberships.length > 0 && (
-            <div 
-              onClick={() => onNavigate('members')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                background: 'var(--status-warning-bg)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--status-warning)' }}>
-                  ⚠️ {expiringMemberships.length} memberships expiring in &le; 3 days
-                </span>
+        {expiringMemberships.length > 0 && (
+          <div 
+            onClick={() => onNavigate('members')}
+            className="mobile-card mobile-card-interactive"
+            style={{
+              margin: 0,
+              padding: '12px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              borderColor: 'rgba(245, 158, 11, 0.4)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertTriangle size={20} color="var(--status-warning)" />
+              <div>
+                <strong style={{ fontSize: '14px', color: 'var(--status-warning)' }}>
+                  {expiringMemberships.length} Memberships Expiring in ≤3 Days
+                </strong>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Send WhatsApp renewal reminders to keep seats reserved
+                </p>
               </div>
-              <ChevronRight size={16} color="var(--status-warning)" />
             </div>
-          )}
+            <ChevronRight size={18} color="var(--status-warning)" />
+          </div>
+        )}
 
-          {pendingPayments.length > 0 && (
-            <div 
-              onClick={() => onNavigate('payments')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                background: 'var(--status-danger-bg)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--status-danger)' }}>
-                  💳 {pendingPayments.length} pending fee settlements
-                </span>
+        {pendingPayments.length > 0 && (
+          <div 
+            onClick={() => onNavigate('payments')}
+            className="mobile-card mobile-card-interactive"
+            style={{
+              margin: 0,
+              padding: '12px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              borderColor: 'rgba(239, 68, 68, 0.4)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <DollarSign size={20} color="var(--status-danger)" />
+              <div>
+                <strong style={{ fontSize: '14px', color: 'var(--status-danger)' }}>
+                  {pendingPayments.length} Outstanding Due Balances (₹{totalDueAmount.toLocaleString('en-IN')})
+                </strong>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Tap to record installment payments
+                </p>
               </div>
-              <ChevronRight size={16} color="var(--status-danger)" />
             </div>
-          )}
-
-          {expiringMemberships.length === 0 && pendingPayments.length === 0 && (
-            <p style={{ fontSize: '13px', color: 'var(--status-success)', textAlign: 'center', padding: '10px' }}>
-              ✓ All memberships and fees are up to date!
-            </p>
-          )}
-        </div>
+            <ChevronRight size={18} color="var(--status-danger)" />
+          </div>
+        )}
       </div>
 
-      {/* 5. Recent Turnstile Activity Feed */}
-      <div className="mobile-card" style={{ margin: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Clock size={16} color="var(--brand-primary)" /> Recent Activity
+      {/* 5. Recent Turnstile Entries Feed */}
+      <div className="mobile-card" style={{ margin: 0, padding: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+            Live Attendance Activity
           </h3>
-          <button 
-            className="btn-ghost" 
-            onClick={() => onNavigate('gate')}
-            style={{ fontSize: '12px', padding: '4px 8px', minHeight: '30px' }}
-          >
-            Gate Logs &rarr;
-          </button>
+          <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => onNavigate('gate')}>
+            View Gate Scanner &rarr;
+          </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {accessLogs.slice(-4).reverse().map((log) => (
+          {accessLogs.slice(-3).reverse().map(log => (
             <div 
               key={log.id}
               style={{
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
+                alignItems: 'center',
                 padding: '8px 10px',
                 background: 'var(--bg-surface-subtle)',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-subtle)'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span 
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: log.result === 'ALLOWED' ? 'var(--status-success)' : 'var(--status-danger)'
-                  }} 
-                />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: log.result === 'ALLOWED' ? 'var(--status-success)' : 'var(--status-danger)' }} />
                 <div>
-                  <p style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                    {log.memberName || log.memberCode || 'Visitor'}
-                  </p>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {log.reason}
-                  </p>
+                  <p style={{ fontSize: '13px', fontWeight: '600' }}>{log.memberName || log.memberCode || 'Unknown Student'}</p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{log.reason}</p>
                 </div>
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
