@@ -36,6 +36,9 @@ jobs:
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
+      - name: Accept Android SDK Licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
       - name: Copy Web Assets to Android Native Assets Folder
         run: |
           mkdir -p android/app/src/main/assets/public
